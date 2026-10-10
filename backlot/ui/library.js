@@ -2,12 +2,13 @@ import { el, fmtAgo, getJSON, subscribe, thumbURL } from "/ui/lib.js";
 
 const grid = document.getElementById("grid");
 const THEME_KEY = "backlot.theme";
-let currentTheme = localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+let currentTheme = "dark";
+try { currentTheme = localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark"; } catch { /* private mode */ }
 
 function applyTheme(theme) {
   currentTheme = theme === "light" ? "light" : "dark";
   document.documentElement.dataset.theme = currentTheme;
-  localStorage.setItem(THEME_KEY, currentTheme);
+  try { localStorage.setItem(THEME_KEY, currentTheme); } catch { /* ignore */ }
 }
 
 function renderThemeToggle() {
@@ -15,8 +16,8 @@ function renderThemeToggle() {
   return el("button", {
     class: "theme-toggle",
     type: "button",
-    title: `Switch to ${next} theme`,
-    "aria-label": `Switch to ${next} theme`,
+    title: next === "light" ? "Thème clair" : "Thème sombre",
+    "aria-label": next === "light" ? "Passer au thème clair" : "Passer au thème sombre",
     "aria-pressed": currentTheme === "light" ? "true" : "false",
     onclick: () => {
       applyTheme(next);
@@ -45,20 +46,21 @@ function card(p) {
   if (p.poster) {
     poster.append(el("img", { src: thumbURL(p.project_id, p.poster, 640), loading: "lazy", alt: "" }));
   } else {
-    poster.append(el("span", { class: "lp-txt" }, "NO MEDIA YET"));
+    poster.append(el("span", { class: "lp-txt" }, "PAS ENCORE D'IMAGE"));
   }
   if (p.live && p.active_stage) {
     poster.append(el("span", { class: "lp-live" },
       el("span", { class: "dot" }),
-      p.awaiting_human ? "◈ AWAITING YOU" : `LIVE · ${p.active_stage.toUpperCase()}`));
+      p.awaiting_human ? "◈ À VALIDER" : `EN COURS · ${p.active_stage.toUpperCase()}`));
   } else if (p.awaiting_human) {
-    poster.append(el("span", { class: "lp-live" }, "◈ AWAITING YOU"));
+    poster.append(el("span", { class: "lp-live" }, "◈ À VALIDER"));
   }
 
   const meta = el("div", { class: "lb-meta" },
-    el("span", { class: "chip" }, p.pipeline_type || "unknown"),
-    p.scene_count ? el("span", { class: "chip" }, `${p.scene_count} scenes`) : null,
-    p.render_count ? el("span", { class: "chip" }, `${p.render_count} renders`) : null,
+    el("span", { class: "chip" }, p.pipeline_type === "coloring-book" ? "livre" : "page"),
+    p.difficulty ? el("span", { class: "chip" }, { easy: "facile", medium: "moyen", hard: "difficile" }[p.difficulty] || p.difficulty) : null,
+    p.page_count ? el("span", { class: "chip" }, `${p.page_count} pages`) : null,
+    p.qa_status ? el("span", { class: `chip${p.qa_status === "pass" ? "" : " warn"}` }, `QA ${p.qa_status}`) : null,
     el("span", { class: "when" }, fmtAgo(p.last_activity)),
   );
 
@@ -75,11 +77,11 @@ function card(p) {
 
 async function render() {
   const projects = await getJSON("/api/projects");
-  document.getElementById("count").textContent = `${projects.length} projects`;
+  document.getElementById("count").textContent = `${projects.length} projet(s)`;
   const liveCount = projects.filter((p) => p.live).length;
   const badge = document.getElementById("liveBadge");
   badge.classList.toggle("idle", liveCount === 0);
-  document.getElementById("liveText").textContent = liveCount ? `${liveCount} LIVE` : "IDLE";
+  document.getElementById("liveText").textContent = liveCount ? `${liveCount} EN COURS` : "INACTIF";
   grid.innerHTML = "";
   document.getElementById("empty").style.display = projects.length ? "none" : "block";
   for (const p of projects) grid.append(card(p));

@@ -17,17 +17,12 @@ from lib.events import read_events
 from lib.paths import PROJECTS_DIR, REPO_ROOT  # single source of truth (env-overridable)
 
 MEDIA_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"}
-MEDIA_VIDEO_EXT = {".mp4", ".webm", ".mov"}
-MEDIA_AUDIO_EXT = {".mp3", ".wav", ".m4a", ".ogg"}
 
 # Directories inside a project we never scan for media (build noise).
 SCAN_EXCLUDE = {"node_modules", ".git", "__pycache__", "history", ".cache"}
 
-# Stages every pipeline shares (fallback rail when the manifest is unknown).
-FALLBACK_STAGES = [
-    "research", "proposal", "idea", "script", "scene_plan",
-    "assets", "edit", "compose", "publish",
-]
+# Fallback rail when the manifest is unknown (coloring-page order).
+FALLBACK_STAGES = ["intake", "cartoon", "line_art", "regions", "page"]
 
 # How long (seconds) without filesystem activity before a board reads "idle".
 LIVE_WINDOW_SECONDS = 5 * 60
@@ -162,7 +157,6 @@ def _build_stage_rail(
             "status": status or "pending",
             "timestamp": cp.get("timestamp") if cp else None,
             "review": cp.get("review") if cp else None,
-            "cost_snapshot": cp.get("cost_snapshot") if cp else None,
             "error": cp.get("error") if cp else None,
             "human_approved": cp.get("human_approved") if cp else None,
             "partial_progress": (cp.get("metadata") or {}).get("partial_progress") if cp else None,
@@ -187,7 +181,7 @@ def _build_stage_rail(
 
     # Checkpoints for stages the manifest doesn't declare (legacy runs,
     # pipeline mismatch) still deserve a slot — at their canonical position
-    # in the pipeline, not dangling after publish ("idea" belongs up front).
+    # in the pipeline, not dangling at the end.
     canon = {name: i for i, name in enumerate(FALLBACK_STAGES)}
     for name, cp in checkpoints.items():
         if name in manifest_stage_names:
@@ -203,7 +197,6 @@ def _build_stage_rail(
             "status": cp.get("status") or "unknown",
             "timestamp": cp.get("timestamp"),
             "review": cp.get("review"),
-            "cost_snapshot": cp.get("cost_snapshot"),
             "error": cp.get("error"),
             "human_approved": cp.get("human_approved"),
             "partial_progress": None,
@@ -229,16 +222,13 @@ def _build_stage_rail(
 # ---------------------------------------------------------------------------
 
 ARTIFACT_FILES = {
-    "research_brief": "research_brief.json",
-    "brief": "brief.json",
-    "proposal_packet": "proposal_packet.json",
-    "script": "script.json",
-    "scene_plan": "scene_plan.json",
-    "asset_manifest": "asset_manifest.json",
-    "edit_decisions": "edit_decisions.json",
-    "render_report": "render_report.json",
-    "final_review": "final_review.json",
-    "publish_log": "publish_log.json",
+    "photo_analysis": "photo_analysis.json",
+    "cartoon_set": "cartoon_set.json",
+    "line_art": "line_art.json",
+    "region_map": "region_map.json",
+    "coloring_page": "coloring_page.json",
+    "qa_report": "qa_report.json",
+    "book_manifest": "book_manifest.json",
     "decision_log": "decision_log.json",
 }
 
@@ -251,7 +241,7 @@ def _collect_artifacts(project_dir: Path, checkpoints: dict[str, dict]) -> dict[
         data = _read_json(art_dir / filename)
         if data is not None:
             artifacts[name] = data
-    # decision_log historically also lives at project root
+    # decision_log is merged at the project root by lib/checkpoint.py
     if "decision_log" not in artifacts:
         data = _read_json(project_dir / "decision_log.json")
         if data is not None:
@@ -267,299 +257,185 @@ def _collect_artifacts(project_dir: Path, checkpoints: dict[str, dict]) -> dict[
 
 
 # ---------------------------------------------------------------------------
-# Storyboard join
+# Step gallery (photo → cartoon → lines → zones → page)
 # ---------------------------------------------------------------------------
 
-def _resolve_asset_path(project_dir: Path, raw_path: str) -> Optional[Path]:
-    """Manifest paths appear in several real-world flavors — try them all.
-
-    Observed on disk: project-relative ("assets/images/x.png"),
-    repo-relative ("projects/<id>/assets/images/x.png"), and absolute.
-    """
-    if not raw_path:
+def _inside(project_dir: Path, raw: Any) -> Optional[str]:
+    """Project-relative path of an existing file inside the project, else None."""
+    if not isinstance(raw, str) or not raw:
         return None
-    p = Path(raw_path)
-    candidates = []
-    if p.is_absolute():
-        candidates.append(p)
-    else:
-        candidates.append(project_dir / raw_path)
-        candidates.append(REPO_ROOT / raw_path)
-        # repo-relative with the project prefix repeated
-        parts = p.parts
-        if len(parts) > 2 and parts[0] == "projects":
-            candidates.append(project_dir.parent / Path(*parts[1:]))
-    for c in candidates:
-        try:
-            if c.is_file():
-                return c
-        except OSError:
-            continue
-    return None
-
-
-def _asset_entry(project_dir: Path, asset: dict) -> dict:
-    """Normalize a manifest asset entry + resolve file existence.
-
-    A file that resolves OUTSIDE the project directory is treated as
-    not-servable (exists=False): /media only serves within the project, and
-    a bare-filename fallback path would 404 or hit the wrong file.
-    """
-    raw_path = asset.get("path") or ""
-    resolved = _resolve_asset_path(project_dir, raw_path)
-    if resolved is not None:
-        try:
-            resolved.resolve().relative_to(Path(project_dir).resolve())
-        except (ValueError, OSError):
-            resolved = None
-    file_path = resolved if resolved is not None else (project_dir / raw_path)
-    exists = resolved is not None
-    kind = asset.get("type") or ""
-    if not kind and file_path.suffix:
-        ext = file_path.suffix.lower()
-        if ext in MEDIA_IMAGE_EXT:
-            kind = "image"
-        elif ext in MEDIA_VIDEO_EXT:
-            kind = "video"
-        elif ext in MEDIA_AUDIO_EXT:
-            kind = "audio"
-    # A visual is only *renderable* on the board if the file it points at is
-    # actually a raster image or a video. Bespoke/atelier assets (type
-    # "animation" pointing at a .tsx composition) exist on disk but can't be
-    # thumbnailed — routing them to <img> yields a broken image. The board
-    # falls back to a per-scene snapshot or the shot-spec placeholder instead.
-    ext = file_path.suffix.lower()
-    renderable = exists and ext in (MEDIA_IMAGE_EXT | MEDIA_VIDEO_EXT)
-    return {
-        "id": asset.get("id"),
-        "type": kind,
-        "scene_id": asset.get("scene_id"),
-        "path": _rel(project_dir, file_path) if exists else raw_path,
-        "exists": exists,
-        "renderable": renderable,
-        "prompt": asset.get("prompt"),
-        "model": asset.get("model"),
-        "source_tool": asset.get("source_tool"),
-        "provider": asset.get("provider"),
-        "cost_usd": asset.get("cost_usd"),
-        "quality_score": asset.get("quality_score"),
-        "duration_seconds": asset.get("duration_seconds"),
-        "resolution": asset.get("resolution"),
-    }
-
-
-def _find_scene_snapshot(project_dir: Path, scene_id: str) -> Optional[dict]:
-    """A per-scene review still, if the run wrote one.
-
-    Atelier/animation scenes have no thumbnailable asset file, so the
-    assets-stage snapshot (`snapshots/<scene_id>.png`) is what the filmstrip
-    shows. Accept exact `<scene_id>.<ext>` and `<scene_id>_*.<ext>` forms.
-    """
-    snap_dir = project_dir / "snapshots"
-    if not scene_id or not snap_dir.is_dir():
-        return None
+    p = Path(raw)
+    if not p.is_absolute():
+        p = project_dir / raw
     try:
-        for f in sorted(snap_dir.iterdir()):
-            if not f.is_file() or f.suffix.lower() not in MEDIA_IMAGE_EXT:
-                continue
-            stem = f.stem
-            if stem == scene_id or stem.startswith(f"{scene_id}_"):
-                return {
-                    "id": f"snap_{scene_id}",
-                    "type": "image",
-                    "scene_id": scene_id,
-                    "path": _rel(project_dir, f),
-                    "exists": True,
-                    "renderable": True,
-                    "snapshot": True,
-                }
-    except OSError:
+        rel = p.resolve().relative_to(Path(project_dir).resolve())
+    except (ValueError, OSError):
         return None
-    return None
+    return rel.as_posix() if p.is_file() else None
 
 
-def _find_script_section(scene: dict, sections: list[dict]) -> Optional[dict]:
-    """Join scene → script section by id, falling back to timing overlap."""
-    sid = scene.get("script_section_id")
-    if sid:
-        for s in sections:
-            if s.get("id") == sid:
-                return s
-    start = scene.get("start_seconds")
-    end = scene.get("end_seconds")
-    if start is None or end is None:
+def _image(project_dir: Path, raw: Any, label: str, **extra: Any) -> Optional[dict]:
+    rel = _inside(project_dir, raw)
+    if rel is None:
         return None
-    best, best_overlap = None, 0.0
-    for s in sections:
-        s0, s1 = s.get("start_seconds"), s.get("end_seconds")
-        if s0 is None or s1 is None:
-            continue
-        overlap = min(end, s1) - max(start, s0)
-        if overlap > best_overlap:
-            best, best_overlap = s, overlap
-    return best
+    return {"path": rel, "label": label, **{k: v for k, v in extra.items() if v is not None}}
 
 
-def _build_storyboard(
-    project_dir: Path,
-    artifacts: dict[str, dict],
-    events: list[dict],
-) -> Optional[dict]:
-    """Scene cards: scene_plan × script × asset_manifest (+ live events)."""
-    scene_plan = artifacts.get("scene_plan")
-    if not scene_plan or not isinstance(scene_plan.get("scenes"), list):
-        return None
-    sections = (artifacts.get("script") or {}).get("sections") or []
-    manifest_assets = (artifacts.get("asset_manifest") or {}).get("assets") or []
+def _build_steps(project_dir: Path, artifacts: dict[str, dict], events: list[dict]) -> list[dict]:
+    """One gallery per stage, from the artifacts each stage produced."""
+    steps: list[dict] = []
+    running = {ev.get("tool") for ev in events[-30:] if ev.get("event") == "start"}
+    running -= {ev.get("tool") for ev in events[-30:] if ev.get("event") in ("finish", "error")}
 
-    def scene_key(value: Any) -> str:
-        # 0 is a legitimate scene id — only None/absent collapses to "".
-        return str(value) if value is not None else ""
+    pa = artifacts.get("photo_analysis") or {}
+    images = [
+        _image(project_dir, pa.get("source_photo"), "photo"),
+        _image(project_dir, pa.get("cutout_path"), "détourage"),
+    ]
+    if not pa:
+        for candidate in sorted((project_dir / "input").glob("photo.*")) if (project_dir / "input").is_dir() else []:
+            images.append(_image(project_dir, str(candidate), "photo"))
+    facts = []
+    if pa:
+        subjects = pa.get("subjects") or []
+        facts.append(f"{len(subjects)} sujet(s) : " + ", ".join(s.get("label", s.get("kind", "?")) for s in subjects))
+        facts.extend(pa.get("warnings") or [])
+    steps.append({
+        "stage": "intake",
+        "title": "Photo",
+        "images": [i for i in images if i],
+        "palette": [c.get("hex") for c in (pa.get("palette") or [])][:16],
+        "facts": facts,
+    })
 
-    assets_by_scene: dict[str, list[dict]] = {}
-    for asset in manifest_assets:
-        if not isinstance(asset, dict):
-            continue
-        entry = _asset_entry(project_dir, asset)
-        assets_by_scene.setdefault(scene_key(entry.get("scene_id")), []).append(entry)
-
-    # A scene is "generating" if its most recent top-level event is an
-    # unfinished start. Nested (depth>0) provider events inside a selector
-    # call are skipped — the outer call's finish is the real completion.
-    generating: dict[str, dict] = {}
-    for ev in events:
-        sid = ev.get("scene_id")
-        if sid is None or ev.get("depth"):
-            continue
-        sid = scene_key(sid)
-        if ev.get("event") == "start":
-            generating[sid] = ev
-        elif ev.get("event") in ("finish", "error"):
-            generating.pop(sid, None)
-
-    cards = []
-    for scene in scene_plan["scenes"]:
-        if not isinstance(scene, dict):
-            continue
-        sid = scene_key(scene.get("id"))
-        section = _find_script_section(scene, sections)
-        scene_assets = assets_by_scene.get(sid, [])
-        visuals = [a for a in scene_assets if a["type"] in ("image", "video", "diagram", "animation")]
-        audio = [a for a in scene_assets if a["type"] in ("audio", "narration", "music", "sfx")]
-        # Only files that can actually be shown (raster/video) are takes; a
-        # bespoke composition asset (.tsx animation) is real but not showable.
-        renderable = [a for a in visuals if a.get("renderable")]
-        # A raster/video asset whose FILE is missing stays as a "file missing"
-        # indicator. But an asset that EXISTS yet can't be shown (a .tsx atelier
-        # composition) is dropped — it falls back to a per-scene snapshot.
-        missing = [a for a in visuals if not a.get("exists") and a["type"] in ("image", "video", "diagram")]
-        active_visual = (
-            renderable[-1] if renderable
-            else missing[-1] if missing
-            else _find_scene_snapshot(project_dir, sid)
+    cs = artifacts.get("cartoon_set") or {}
+    cands = []
+    for c in cs.get("candidates") or []:
+        img = _image(
+            project_dir,
+            c.get("path"),
+            c.get("id", "?"),
+            score=(c.get("score") or {}).get("total"),
+            selected=c.get("id") == cs.get("selected_id"),
         )
-        cards.append({
-            "id": sid,
-            "type": scene.get("type"),
-            "description": scene.get("description"),
-            "start_seconds": scene.get("start_seconds"),
-            "end_seconds": scene.get("end_seconds"),
-            "duration_seconds": (
-                max(0, (scene.get("end_seconds") or 0) - (scene.get("start_seconds") or 0))
-                if scene.get("end_seconds") is not None and scene.get("start_seconds") is not None
-                else None
-            ),
-            "hero_moment": bool(scene.get("hero_moment")),
-            "shot_language": scene.get("shot_language"),
-            "shot_intent": scene.get("shot_intent"),
-            "framing": scene.get("framing"),
-            "movement": scene.get("movement"),
-            "narration": (section or {}).get("text"),
-            "section_label": (section or {}).get("label"),
-            "required_assets": scene.get("required_assets") or [],
-            "visual": active_visual,
-            "takes": renderable,
-            "audio": audio,
-            "generating": generating.get(sid) is not None,
-            "generating_tool": (generating.get(sid) or {}).get("tool"),
-        })
+        if img:
+            cands.append(img)
+    steps.append({
+        "stage": "cartoon",
+        "title": "Cartoon",
+        "images": cands,
+        "facts": [
+            f for f in (
+                f"backend {cs.get('backend')}" if cs.get("backend") else None,
+                f"modèle {cs.get('model_family')}" if cs.get("model_family") else None,
+                f"ressemblance {cs.get('identity_mode')}" if cs.get("identity_mode") else None,
+                cs.get("selection_reason"),
+            ) if f
+        ],
+        "generating": bool(running & {"cartoonize", "diffusers_cartoonize", "comfyui_cartoonize", "opencv_cartoonize"}),
+    })
 
-    total = scene_plan.get("metadata", {}).get("total_duration_seconds")
-    if total is None and cards:
-        ends = [c["end_seconds"] for c in cards if c["end_seconds"] is not None]
-        total = max(ends) if ends else None
+    la = artifacts.get("line_art") or {}
+    steps.append({
+        "stage": "line_art",
+        "title": "Traits",
+        "images": [i for i in (
+            _image(project_dir, la.get("line_mask_path"), "traits bruts"),
+            _image(project_dir, la.get("flat_path"), "aplats"),
+        ) if i],
+        "facts": [", ".join(la.get("methods") or [])] if la.get("methods") else [],
+    })
+
+    rm = artifacts.get("region_map") or {}
+    steps.append({
+        "stage": "regions",
+        "title": "Zones",
+        "images": [i for i in (
+            _image(project_dir, rm.get("coloring_png"), "zones"),
+            _image(project_dir, rm.get("preview_png"), "aperçu des zones"),
+            _image(project_dir, rm.get("model_png"), "modèle"),
+        ) if i],
+        "facts": [
+            f"{rm.get('region_count')} zones · {rm.get('black_fill_count')} détails noircis · difficulté {rm.get('difficulty')}"
+        ] if rm else [],
+        "palette": [c.get("hex") for c in (rm.get("palette_used") or [])][:24],
+    })
+
+    cp = artifacts.get("coloring_page") or {}
+    files = []
+    for key, label in (("page_svg", "page.svg"), ("coloring_svg", "coloriage.svg"), ("model_svg", "modele.svg"),
+                       ("coloring_png", "coloriage.png"), ("model_png", "modele.png")):
+        rel = _inside(project_dir, cp.get(key))
+        if rel:
+            files.append({"path": rel, "label": label})
+    steps.append({
+        "stage": "page",
+        "title": "Page",
+        "images": [i for i in (_image(project_dir, cp.get("page_png"), "page A4"),) if i],
+        "files": files,
+        "facts": [f"{cp.get('paper')} · {cp.get('dpi')} dpi · mise en page {cp.get('layout_mode')}"] if cp else [],
+    })
+    return steps
+
+
+def _build_book(project_dir: Path, artifacts: dict[str, dict]) -> Optional[dict]:
+    manifest = artifacts.get("book_manifest")
+    if not manifest:
+        return None
+    pages = []
+    for page in manifest.get("pages") or []:
+        entry = {
+            "index": page.get("index"),
+            "project_id": page.get("project_id"),
+            "status": page.get("status"),
+            "note": page.get("note"),
+            "poster_project": None,
+            "poster": None,
+        }
+        own = _inside(project_dir, page.get("book_page_png"))
+        if own:
+            entry["poster_project"], entry["poster"] = project_dir.name, own
+        elif page.get("project_id") and page.get("page_png"):
+            sub_dir = project_dir.parent / page["project_id"]
+            rel = _inside(sub_dir, page["page_png"])
+            if rel:
+                entry["poster_project"], entry["poster"] = page["project_id"], rel
+        pages.append(entry)
     return {
-        "scenes": cards,
-        "total_duration_seconds": total,
-        "style_playbook": scene_plan.get("style_playbook"),
+        "pages": pages,
+        "contact_sheet": _inside(project_dir, manifest.get("contact_sheet")),
+        "output_dir": manifest.get("output_dir"),
     }
 
 
-# ---------------------------------------------------------------------------
-# Media discovery
-# ---------------------------------------------------------------------------
-
-def _scan_media(project_dir: Path) -> dict[str, list[dict]]:
-    """Discovered media files (renders, loose assets, snapshots)."""
-    renders: list[dict] = []
-    snapshots: list[dict] = []
-    music: list[dict] = []
-
-    renders_dir = project_dir / "renders"
-    if renders_dir.is_dir():
-        for f in sorted(renders_dir.iterdir()):
-            if f.suffix.lower() in MEDIA_VIDEO_EXT and f.is_file():
-                renders.append({"path": _rel(project_dir, f), "size": f.stat().st_size,
-                                "mtime": f.stat().st_mtime})
-    # Atelier heuristic: deliverables at project root.
-    for f in sorted(project_dir.glob("*.mp4")):
-        renders.append({"path": _rel(project_dir, f), "size": f.stat().st_size,
-                        "mtime": f.stat().st_mtime, "at_root": True})
-    for f in sorted(project_dir.glob("*.mp3")):
-        music.append({"path": _rel(project_dir, f), "at_root": True})
-    music_dir = project_dir / "assets" / "music"
-    if music_dir.is_dir():
-        for f in sorted(music_dir.iterdir()):
-            if f.suffix.lower() in MEDIA_AUDIO_EXT:
-                music.append({"path": _rel(project_dir, f)})
-
-    for dirname in ("snapshots", "verify"):
-        d = project_dir / dirname
-        if d.is_dir():
-            for f in sorted(d.iterdir()):
-                if f.suffix.lower() in MEDIA_IMAGE_EXT and f.is_file():
-                    snapshots.append({"path": _rel(project_dir, f)})
-
-    renders.sort(key=lambda r: r.get("mtime", 0), reverse=True)
-    return {"renders": renders, "snapshots": snapshots, "music": music}
+def _scan_images(project_dir: Path) -> list[dict]:
+    """Loose images (degraded view when a project has no artifacts yet)."""
+    found = []
+    for rel_dir in ("output", "assets/regions", "assets/cartoon", "input"):
+        d = project_dir / rel_dir
+        if not d.is_dir():
+            continue
+        for f in sorted(d.iterdir()):
+            if f.is_file() and f.suffix.lower() in MEDIA_IMAGE_EXT - {".svg"}:
+                found.append({"path": _rel(project_dir, f)})
+    return found[:24]
 
 
 def _find_poster(project_dir: Path, state: dict) -> Optional[str]:
-    """Best poster for the library card (image path, or a video path —
-    the /thumb endpoint extracts a frame from videos)."""
-    board = state.get("storyboard") or {}
-    for card in board.get("scenes", []):
-        visual = card.get("visual")
-        if visual and visual.get("exists") and visual.get("type") == "image":
-            return visual["path"]
-    for snap in (state.get("media") or {}).get("snapshots", []):
-        return snap["path"]
-    # Common image homes, in order of how representative they usually are.
-    for rel_dir in ("assets/images", "assets/frames", "exports", "assets", "."):
-        d = (project_dir / rel_dir) if rel_dir != "." else project_dir
-        if not d.is_dir():
-            continue
-        try:
-            for f in sorted(d.iterdir()):
-                if f.is_file() and f.suffix.lower() in MEDIA_IMAGE_EXT:
-                    return _rel(project_dir, f)
-        except OSError:
-            continue
-    # Last resort: the newest render — /thumb extracts a poster frame.
-    renders = (state.get("media") or {}).get("renders", [])
-    if renders:
-        return renders[0]["path"]
-    return None
+    """Most representative image for the library card."""
+    by_stage = {s["stage"]: s for s in state.get("steps") or []}
+    for stage in ("page", "regions", "cartoon", "intake"):
+        images = (by_stage.get(stage) or {}).get("images") or []
+        selected = [i for i in images if i.get("selected")]
+        if selected:
+            return selected[0]["path"]
+        if images:
+            return images[0]["path"]
+    book = state.get("book") or {}
+    if book.get("contact_sheet"):
+        return book["contact_sheet"]
+    images = state.get("images") or []
+    return images[0]["path"] if images else None
 
 
 def _last_activity(project_dir: Path) -> float:
@@ -607,21 +483,8 @@ def load_board_state(project_dir: Path) -> dict[str, Any]:
 
     artifacts = _collect_artifacts(project_dir, checkpoints)
     events = read_events(project_dir, limit=250)
-    storyboard = _build_storyboard(project_dir, artifacts, events)
-    media = _scan_media(project_dir)
-
     stages = _build_stage_rail(pipeline_meta, checkpoints, history)
-
-    # Cost: latest checkpoint snapshot wins; fall back to manifest total.
-    cost = None
-    for cp in sorted(checkpoints.values(), key=lambda c: c.get("_mtime", 0), reverse=True):
-        if cp.get("cost_snapshot"):
-            cost = cp["cost_snapshot"]
-            break
-    if cost is None:
-        total = (artifacts.get("asset_manifest") or {}).get("total_cost_usd")
-        if total is not None:
-            cost = {"total_spent_usd": total}
+    is_book = pipeline_type == "coloring-book"
 
     import time
     last_activity = _last_activity(project_dir)
@@ -637,20 +500,25 @@ def load_board_state(project_dir: Path) -> dict[str, Any]:
             stage_entry["stalled"] = True
             stage_entry["stalled_minutes"] = int((now - last_activity) / 60)
 
+    settings = marker.get("settings") or {}
     state: dict[str, Any] = {
         "project_id": project_id,
         "title": marker.get("title") or meta_json.get("name") or project_id.replace("-", " ").title(),
         "pipeline": pipeline_meta,
-        "style_playbook": marker.get("style_playbook"),
+        "style": marker.get("style"),
+        "difficulty": settings.get("difficulty"),
+        "commercial_safe": settings.get("commercial_safe"),
+        "book_id": marker.get("book_id"),
         "created_at": marker.get("created_at"),
         "has_marker": bool(marker),
         "has_pipeline_state": bool(checkpoints),
         "stages": stages,
         "artifacts": artifacts,
-        "storyboard": storyboard,
-        "media": media,
+        "steps": [] if is_book else _build_steps(project_dir, artifacts, events),
+        "book": _build_book(project_dir, artifacts) if is_book else None,
+        "qa": artifacts.get("qa_report"),
+        "images": _scan_images(project_dir),
         "events": events,
-        "cost": cost,
         "last_activity": last_activity,
         "live": bool(last_activity and (now - last_activity) < LIVE_WINDOW_SECONDS),
     }
@@ -678,8 +546,10 @@ def summarize_project(project_dir: Path) -> dict[str, Any]:
             for s in state["stages"] if not s.get("undeclared")
         ],
         "completed_count": len(done),
-        "render_count": len(state["media"]["renders"]),
-        "scene_count": len((state["storyboard"] or {}).get("scenes", [])),
+        "difficulty": state["difficulty"],
+        "page_count": len((state["book"] or {}).get("pages", [])),
+        "qa_status": (state["qa"] or {}).get("status"),
+        "book_id": state["book_id"],
     }
 
 
@@ -707,8 +577,10 @@ def list_projects(projects_dir: Optional[Path] = None) -> list[dict[str, Any]]:
                 "awaiting_human": False,
                 "stage_states": [],
                 "completed_count": 0,
-                "render_count": 0,
-                "scene_count": 0,
+                "difficulty": None,
+                "page_count": 0,
+                "qa_status": None,
+                "book_id": None,
                 "error": "unreadable",
             })
     summaries.sort(key=lambda s: (not s["live"], -(s["last_activity"] or 0)))

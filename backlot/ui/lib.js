@@ -21,27 +21,13 @@ export function el(tag, attrs = {}, ...children) {
   return node;
 }
 
-export function fmtDuration(seconds) {
-  const n = Number(seconds);
-  if (seconds == null || !Number.isFinite(n)) return "";
-  const s = Math.max(0, Math.round(n));
-  const m = Math.floor(s / 60);
-  return `${m}:${String(s % 60).padStart(2, "0")}`;
-}
-
-export function fmtMoney(v) {
-  const n = Number(v);
-  if (v == null || !Number.isFinite(n)) return "—";
-  return `$${n.toFixed(2)}`;
-}
-
 export function fmtAgo(epochSeconds) {
   if (!epochSeconds) return "";
   const diff = Date.now() / 1000 - epochSeconds;
-  if (diff < 90) return "just now";
-  if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
-  return `${Math.round(diff / 86400)}d ago`;
+  if (diff < 90) return "à l'instant";
+  if (diff < 3600) return `il y a ${Math.round(diff / 60)} min`;
+  if (diff < 86400) return `il y a ${Math.round(diff / 3600)} h`;
+  return `il y a ${Math.round(diff / 86400)} j`;
 }
 
 export function fmtClock(iso) {
@@ -78,21 +64,6 @@ export function subscribe(url, onChange) {
   };
   source.onerror = () => { /* EventSource auto-reconnects */ };
   return source;
-}
-
-// Deterministic pseudo-waveform bars (seeded by a string).
-export function waveBars(container, seedStr, count = 26, maxH = 14) {
-  let seed = 0;
-  for (const c of seedStr || "wave") seed = (seed * 31 + c.charCodeAt(0)) % 2147483647;
-  seed = seed || 7;
-  container.innerHTML = "";
-  for (let i = 0; i < count; i++) {
-    seed = (seed * 16807) % 2147483647;
-    const h = 3 + ((seed % 100) / 100) * maxH * (0.55 + 0.45 * Math.sin(i / 5));
-    const bar = document.createElement("i");
-    bar.style.height = `${Math.max(3, h)}px`;
-    container.append(bar);
-  }
 }
 
 export const STAGE_ICONS = {

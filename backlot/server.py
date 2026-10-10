@@ -22,7 +22,7 @@ from backlot.state import PROJECTS_DIR, REPO_ROOT, list_projects, load_board_sta
 
 UI_DIR = Path(__file__).resolve().parent / "ui"
 THUMB_CACHE_DIR = REPO_ROOT / ".backlot" / "thumbs"
-THUMB_WIDTHS = (320, 640, 960)
+THUMB_WIDTHS = (320, 640, 960, 1600)
 
 # Paths inside a project whose changes are pure noise for the board.
 _IGNORE_PARTS = {"node_modules", ".git", "__pycache__", ".cache"}
@@ -100,7 +100,8 @@ def _cached_summaries() -> list[dict]:
                     "poster": None, "live": False, "last_activity": 0,
                     "active_stage": None, "awaiting_human": False,
                     "stage_states": [], "completed_count": 0,
-                    "render_count": 0, "scene_count": 0, "error": "unreadable",
+                    "difficulty": None, "page_count": 0, "qa_status": None,
+                    "book_id": None, "error": "unreadable",
                 }
             _summary_cache[entry.name] = cached
         summaries.append(cached)
@@ -254,10 +255,7 @@ def create_app() -> FastAPI:
         width = min(THUMB_WIDTHS, key=lambda x: abs(x - w))
         cached = await asyncio.to_thread(_thumbnail_for, target, width)
         if cached is None:
-            # Never fall back to raw video bytes for an <img> consumer (F-03);
-            # non-thumbable images are safe to serve as-is.
-            if target.suffix.lower() in {".mp4", ".webm", ".mov"}:
-                raise HTTPException(status_code=404, detail="no poster frame available")
+            # Non-thumbable images (SVG...) are safe to serve as-is.
             return FileResponse(target)
         return FileResponse(cached, media_type="image/jpeg")
 
@@ -323,11 +321,8 @@ def _sse(payload: dict) -> str:
 
 
 def _thumbnail_for(source: Path, width: int) -> Optional[Path]:
-    """Downscale an image (or extract a video poster frame) to a cached JPEG."""
-    suffix = source.suffix.lower()
-    is_image = suffix in {".png", ".jpg", ".jpeg", ".webp", ".gif"}
-    is_video = suffix in {".mp4", ".webm", ".mov"}
-    if not (is_image or is_video):
+    """Downscale an image to a cached JPEG."""
+    if source.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}:
         return None
     try:
         import hashlib
@@ -343,22 +338,11 @@ def _thumbnail_for(source: Path, width: int) -> Optional[Path]:
         # must not write (and replace from) the same temp file.
         import uuid
         tmp = THUMB_CACHE_DIR / f"{key}.{uuid.uuid4().hex[:8]}.tmp.jpg"
-        if is_video:
-            import subprocess
-            result = subprocess.run(
-                ["ffmpeg", "-y", "-loglevel", "error", "-ss", "1.5",
-                 "-i", str(source), "-frames:v", "1",
-                 "-vf", f"scale={width}:-2", str(tmp)],
-                capture_output=True, timeout=30,
-            )
-            if result.returncode != 0 or not tmp.is_file():
-                return None
-        else:
-            from PIL import Image
-            with Image.open(source) as img:
-                img = img.convert("RGB")
-                img.thumbnail((width, width * 3))
-                img.save(tmp, "JPEG", quality=82)
+        from PIL import Image
+        with Image.open(source) as img:
+            img = img.convert("RGB")
+            img.thumbnail((width, width * 3))
+            img.save(tmp, "JPEG", quality=82)
         tmp.replace(cached)
         return cached
     except Exception:

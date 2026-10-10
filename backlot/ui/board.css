@@ -1,9 +1,8 @@
 /* ============================================================
-   BACKLOT — Living Storyboard design system (mockup)
+   BACKLOT — OpenDrawer board design system
    Dark-room editorial: near-black matte canvas, artifacts glow.
+   No web fonts: the board works fully offline (system fonts only).
    ============================================================ */
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap');
 
 :root {
   --bg: #0a0a0c;
@@ -1040,3 +1039,57 @@ body:not(.first) .approval-review { animation: none; }
   .approval-review-foot button { width: 100%; }
   .approval-status { white-space: normal; }
 }
+
+
+/* ============================================================
+   OpenDrawer — coloring steps, QA, book
+   ============================================================ */
+.steps { display: flex; flex-direction: column; gap: 18px; }
+.step .panel-head { display: flex; align-items: center; gap: 10px; }
+.step-status {
+  font-family: var(--mono); font-size: calc(10px * var(--fs-scale)); letter-spacing: .08em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-3);
+}
+.step-status.completed, .step-status.qa-pass { color: var(--green); border-color: rgba(79,194,131,.35); background: var(--green-dim); }
+.step-status.in_progress, .step-status.awaiting_human, .step-status.qa-warn { color: var(--amber); border-color: rgba(240,168,60,.4); background: var(--amber-dim); }
+.step-status.failed, .step-status.qa-fail { color: var(--red); border-color: rgba(229,84,75,.4); background: var(--red-dim); }
+.step-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.step-grid.single { grid-template-columns: minmax(0, 520px); }
+.step-img {
+  position: relative; margin: 0; cursor: zoom-in; border-radius: 10px; overflow: hidden;
+  border: 1px solid var(--border); background: #fff;
+}
+.step-img img { width: 100%; display: block; aspect-ratio: auto; object-fit: contain; background: #fff; }
+.step-img.selected { border-color: var(--green); box-shadow: 0 0 0 2px var(--green-dim); }
+.step-img figcaption {
+  font-family: var(--mono); font-size: calc(10px * var(--fs-scale)); color: var(--text-2);
+  padding: 6px 8px; background: var(--surface-2); border-top: 1px solid var(--border-soft);
+}
+.step-img .badges { position: absolute; top: 6px; left: 6px; display: flex; gap: 6px; }
+.step-img .badge {
+  font-family: var(--mono); font-size: calc(9.5px * var(--fs-scale)); padding: 2px 6px; border-radius: 6px;
+  background: var(--badge-bg); color: #fff;
+}
+.step-img .badge.pick { background: var(--green); color: #0a0a0c; }
+.swatches { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
+.swatches i { width: 22px; height: 22px; border-radius: 5px; border: 1px solid rgba(0,0,0,.25); display: block; }
+.facts { margin: 10px 0 0; padding-left: 18px; color: var(--text-2); font-size: calc(12px * var(--fs-scale)); line-height: 1.6; }
+.files { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.files a { text-decoration: none; }
+.qa-list { list-style: none; margin: 0; padding: 0; font-size: calc(12px * var(--fs-scale)); line-height: 1.55; }
+.qa-list li { padding: 4px 0; border-bottom: 1px solid var(--border-soft); color: var(--text-2); }
+.qa-list li b { display: inline-block; width: 16px; }
+.qa-list .qa-pass b { color: var(--green); }
+.qa-list .qa-warn b { color: var(--amber); }
+.qa-list .qa-fail b { color: var(--red); }
+.book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
+.book-page { text-decoration: none; color: inherit; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface-2); }
+.book-page .bp-poster { aspect-ratio: 210 / 297; background: #fff; display: flex; align-items: center; justify-content: center; }
+.book-page .bp-poster img { width: 100%; height: 100%; object-fit: contain; }
+.book-page .bp-meta { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; }
+.drawer .d-label { font-family: var(--mono); font-size: calc(9.5px * var(--fs-scale)); color: var(--text-3); letter-spacing: .1em; text-transform: uppercase; margin: 6px 0 4px; }
+.lightbox { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; max-width: min(92vw, 1100px); max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; }
+.lightbox .lb-head { display: flex; gap: 16px; align-items: center; padding: 10px 14px; font-family: var(--mono); font-size: calc(11px * var(--fs-scale)); color: var(--text-2); }
+.lightbox .lb-head a { color: var(--blue); }
+.lightbox .lb-head .close { margin-left: auto; cursor: pointer; }
+.lightbox img { max-width: 100%; max-height: calc(92vh - 48px); object-fit: contain; background: #fff; }
