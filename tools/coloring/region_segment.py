@@ -300,9 +300,15 @@ def detail_strokes(strokes: np.ndarray, final_borders: np.ndarray, subject: np.n
     index = np.arange(1, n)
     length = ndimage.sum(np.ones_like(half_width), labels=labels, index=index)
     width = ndimage.median(half_width, labels=labels, index=index)
+    distance = ndimage.mean(to_border, labels=labels, index=index)
     keep = np.zeros(n, bool)
-    # A detail is a long, *thin* stroke (wide dark bands are areas, not lines).
-    keep[1:] = (length >= preset.min_detail_len_px) & (width <= MAX_DETAIL_HALF_WIDTH_PX)
+    # A detail is a long, *thin* stroke (wide dark bands are areas, not lines)
+    # lying well inside a zone (leftovers hugging a border are outline debris).
+    keep[1:] = (
+        (length >= preset.min_detail_len_px)
+        & (width <= MAX_DETAIL_HALF_WIDTH_PX)
+        & (distance >= 3 * preset.line_px)
+    )
     return keep[labels]
 
 
@@ -325,6 +331,31 @@ def ink_dots(strokes: np.ndarray, final_borders: np.ndarray, subject: np.ndarray
             continue  # touches a zone border: already part of a line
         keep[i] = True
     return keep[labels]
+
+
+def _compact(labels: np.ndarray, origin: dict[int, int]) -> tuple[np.ndarray, dict[int, int]]:
+    """Relabel to 1..K (0 stays background); carry the original zone ids along."""
+    uniq = np.unique(labels)
+    uniq = uniq[uniq != 0]
+    remap = np.zeros(int(labels.max()) + 1, np.int32)
+    remap[uniq] = np.arange(1, len(uniq) + 1, dtype=np.int32)
+    return remap[labels], {int(remap[u]): origin[int(u)] for u in uniq}
+
+
+def smooth_labels(labels: np.ndarray, preset: DifficultyPreset) -> np.ndarray:
+    """Majority-style smoothing of zone borders (removes pixel-level wobble).
+
+    A median filter on the label map always returns a label present in the
+    window, so on a border between two zones it acts as a majority vote.
+    Requires ≤ 255 labels (true after simplification); otherwise a no-op.
+    """
+    if labels.max() >= 255:
+        return labels
+    k = max(5, preset.line_px | 1)
+    out = labels.astype(np.uint8)
+    for _ in range(2):
+        out = cv2.medianBlur(out, k)
+    return out.astype(np.int32)
 
 
 def segment(
@@ -374,13 +405,10 @@ def segment(
     roots = np.array([graph.find(i) for i in range(n + 1)], dtype=np.int32)
     final = roots[partition]
     final[~subject] = 0
-    # Relabel 1..K for compact ids (0 stays background).
-    uniq = np.unique(final)
-    uniq = uniq[uniq != 0]
-    remap = np.zeros(final.max() + 1, np.int32)
-    remap[uniq] = np.arange(1, len(uniq) + 1, dtype=np.int32)
-    old_by_new = {int(remap[u]): int(u) for u in uniq}
-    final = remap[final]
+    final, old_by_new = _compact(final, {int(u): int(u) for u in np.unique(final)})
+    final = smooth_labels(final, preset)
+    final, old_by_new = _compact(final, old_by_new)
+    uniq = np.arange(1, final.max() + 1)
 
     borders = border_mask(final)
     zone_lines = cv2.dilate(borders.astype(np.uint8), disk(max(1, preset.line_px // 2))) > 0

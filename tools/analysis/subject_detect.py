@@ -96,6 +96,8 @@ def detect_faces(rgb: np.ndarray) -> tuple[list[list[int]], str]:
         return boxes, "yunet"
     except (ModelNotDownloaded, AttributeError, cv2.error, KeyError):
         pass
+    if not hasattr(cv2, "CascadeClassifier"):  # removed from OpenCV 5 main modules
+        return [], "none"
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
     cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
     min_side = max(24, int(min(h, w) * 0.05))

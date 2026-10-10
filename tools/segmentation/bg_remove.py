@@ -68,6 +68,12 @@ def grabcut_mask(rgb: np.ndarray, boxes: list[list[int]] | None, iterations: int
         cx1, cy1 = x1 - (x1 - x0) // 3, y1 - (y1 - y0) // 4
         if cx1 > cx0 and cy1 > cy0:
             gc[cy0:cy1, cx0:cx1] = cv2.GC_FGD
+    # GrabCut needs background samples: the frame border is always background.
+    border = max(2, int(min(sh, sw) * 0.02))
+    gc[:border, :] = cv2.GC_BGD
+    gc[-border:, :] = cv2.GC_BGD
+    gc[:, :border] = cv2.GC_BGD
+    gc[:, -border:] = cv2.GC_BGD
     bgd = np.zeros((1, 65), np.float64)
     fgd = np.zeros((1, 65), np.float64)
     cv2.grabCut(cv2.cvtColor(small, cv2.COLOR_RGB2BGR), gc, None, bgd, fgd, iterations, cv2.GC_INIT_WITH_MASK)
