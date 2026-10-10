@@ -34,10 +34,9 @@ class DifficultyPreset:
     detail_px: int
     # Region simplification.
     min_region_frac: float  # of the subject area; smaller zones are merged or blackened
-    dark_fill_max_frac: float  # small *dark* zones up to this size are pre-filled black
+    dark_fill_max_frac: float  # compact *dark* zones up to this size are pre-filled black
     min_regions: int
     max_regions: int
-    merge_delta_e: float  # adjacent zones closer than this (CIEDE76) may be merged
     # Line extraction.
     quant_colors: int  # k-means colors used to find color boundaries
     gap_close_px: int  # morphological closing to seal small gaps in lines
@@ -57,13 +56,12 @@ PRESETS: dict[str, DifficultyPreset] = {
         outline_px=20,
         detail_px=10,
         min_region_frac=0.006,
-        dark_fill_max_frac=0.0025,
+        dark_fill_max_frac=0.006,
         min_regions=8,
         max_regions=30,
-        merge_delta_e=22.0,
         quant_colors=8,
         gap_close_px=9,
-        keep_detail_strokes=False,
+        keep_detail_strokes=True,
         min_detail_len_px=120,
     ),
     "medium": DifficultyPreset(
@@ -74,10 +72,9 @@ PRESETS: dict[str, DifficultyPreset] = {
         outline_px=13,
         detail_px=7,
         min_region_frac=0.002,
-        dark_fill_max_frac=0.0012,
+        dark_fill_max_frac=0.004,
         min_regions=20,
         max_regions=70,
-        merge_delta_e=14.0,
         quant_colors=14,
         gap_close_px=7,
         keep_detail_strokes=True,
@@ -91,10 +88,9 @@ PRESETS: dict[str, DifficultyPreset] = {
         outline_px=9,
         detail_px=5,
         min_region_frac=0.0007,
-        dark_fill_max_frac=0.0005,
+        dark_fill_max_frac=0.0025,
         min_regions=45,
         max_regions=160,
-        merge_delta_e=9.0,
         quant_colors=22,
         gap_close_px=5,
         keep_detail_strokes=True,

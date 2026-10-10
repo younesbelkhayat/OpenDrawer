@@ -1,7 +1,7 @@
 """Thin REST client for a running ComfyUI server.
 
 Handles the full generation cycle: submit workflow, poll for completion,
-download artifacts.  Used by comfyui_image, comfyui_video, and comfyui_music.
+download artifacts.  Used by comfyui_cartoonize.
 """
 
 from __future__ import annotations

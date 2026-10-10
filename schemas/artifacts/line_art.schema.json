@@ -20,7 +20,8 @@
       "type": "string"
     },
     "line_mask_path": {
-      "type": "string"
+      "type": "string",
+      "description": "All raw lines (black = line)"
     },
     "flat_path": {
       "type": "string"
@@ -59,6 +60,10 @@
     },
     "difficulty": {
       "type": "string"
+    },
+    "strokes_mask_path": {
+      "type": "string",
+      "description": "Only strokes drawn in the cartoon (dark outlines + neural lineart), black = stroke"
     }
   },
   "additionalProperties": true

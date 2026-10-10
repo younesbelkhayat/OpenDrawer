@@ -33,8 +33,7 @@ stages:
     skill: pipelines/coloring-page/intake-director
     produces: [photo_analysis]
     required_tools: [subject_detect, bg_remove, palette_extract]
-    optional_tools: [face_restore, upscale]
-    tools_available: [subject_detect, bg_remove, palette_extract, face_restore, upscale]
+    tools_available: [subject_detect, bg_remove, palette_extract]
     review_focus:
       - Tous les sujets (personnes, animaux) sont détectés, rien de plus
       - Le détourage garde cheveux, oreilles, mains, queue ; le fond est blanc
