@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "opendrawer/artifacts/book_manifest",
+  "title": "Coloring book manifest",
+  "description": "Multi-page coloring book built from a folder of photos; each page is its own coloring-page project.",
+  "type": "object",
+  "required": [
+    "version",
+    "book_id",
+    "pages"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "book_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "difficulty": {
+      "type": "string"
+    },
+    "source_dir": {
+      "type": "string"
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "index",
+          "project_id",
+          "source_photo",
+          "status"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "source_photo": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "in_progress",
+              "awaiting_human",
+              "completed",
+              "failed",
+              "skipped"
+            ]
+          },
+          "page_png": {
+            "type": "string"
+          },
+          "page_svg": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "output_dir": {
+      "type": "string"
+    },
+    "contact_sheet": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

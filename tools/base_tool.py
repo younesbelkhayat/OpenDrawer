@@ -1,7 +1,7 @@
 """Base tool class implementing the expanded ToolContract.
 
-Every tool in OpenMontage inherits from BaseTool. This enforces a uniform
-interface for discovery, execution, cost estimation, and health reporting.
+Every tool in OpenDrawer inherits from BaseTool. This enforces a uniform
+interface for discovery, execution, runtime estimation, and health reporting.
 """
 
 from __future__ import annotations
@@ -25,8 +25,9 @@ from typing import Any, Callable, Optional
 def _load_dotenv() -> None:
     """Load .env into os.environ once at import time.
 
-    This ensures API keys are available before any tool is instantiated,
-    even when tools are imported directly without going through the registry.
+    This ensures local settings (model directories, ComfyUI URL, device
+    overrides) are available before any tool is instantiated, even when tools
+    are imported directly without going through the registry.
     Only sets variables that are not already in the environment.
     """
     env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -63,12 +64,10 @@ _load_dotenv()
 
 class ToolTier(str, Enum):
     CORE = "core"
-    VOICE = "voice"
+    ANALYZE = "analyze"
     ENHANCE = "enhance"
     GENERATE = "generate"
-    SOURCE = "source"
-    ANALYZE = "analyze"
-    PUBLISH = "publish"
+    LAYOUT = "layout"
 
 
 class ToolStability(str, Enum):
@@ -86,10 +85,9 @@ class ToolStatus(str, Enum):
 class ToolRuntime(str, Enum):
     """Where and how a tool executes."""
 
-    LOCAL = "local"  # Runs entirely on-device, free, no network
-    LOCAL_GPU = "local_gpu"  # Runs on-device but needs GPU (VRAM)
-    API = "api"  # Calls an external API, requires API key, costs money
-    HYBRID = "hybrid"  # Can run locally OR via API (e.g., image_selector)
+    LOCAL = "local"  # Runs entirely on-device on CPU, no network
+    LOCAL_GPU = "local_gpu"  # Runs on-device and needs a GPU (VRAM)
+    HYBRID = "hybrid"  # Runs on GPU when present, falls back to CPU
 
 
 class ExecutionMode(str, Enum):
@@ -137,7 +135,6 @@ class ToolResult:
     data: dict[str, Any] = field(default_factory=dict)
     artifacts: list[str] = field(default_factory=list)
     error: Optional[str] = None
-    cost_usd: Optional[float] = 0.0
     duration_seconds: float = 0.0
     seed: Optional[int] = None
     model: Optional[str] = None
@@ -179,7 +176,7 @@ def _instrument_execute(fn: Callable) -> Callable:
         output_path = inputs.get("output_path") if isinstance(inputs, dict) else None
         # Nesting depth: selector tools delegate to provider tools' execute().
         # Both emit (the ticker wants the provider name too), but depth lets
-        # consumers dedupe — e.g. sum cost_usd only at depth 0.
+        # consumers dedupe — e.g. count runtime only at depth 0.
         depth = getattr(depth_state, "value", 0)
         depth_state.value = depth + 1
         project_dir = infer_project_dir(inputs)
@@ -222,7 +219,6 @@ def _instrument_execute(fn: Callable) -> Callable:
             # (first call of a run) — attribute the finish if possible.
             project_dir = infer_project_dir(inputs)
         if project_dir is not None:
-            cost = getattr(result, "cost_usd", None)
             emit_event(
                 project_dir,
                 {
@@ -230,8 +226,6 @@ def _instrument_execute(fn: Callable) -> Callable:
                     "event": "finish",
                     "output_path": str(output_path) if output_path else None,
                     "success": getattr(result, "success", None),
-                    # NOTE: 0.0 is meaningful (ran for free) — only None is dropped.
-                    "cost_usd": cost if isinstance(cost, (int, float)) else None,
                     "duration_s": round(time.monotonic() - started, 2),
                 },
             )
@@ -242,7 +236,7 @@ def _instrument_execute(fn: Callable) -> Callable:
 
 
 class BaseTool(ABC):
-    """Abstract base class for all OpenMontage tools."""
+    """Abstract base class for all OpenDrawer tools."""
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Auto-instrument every concrete execute() with Backlot events."""
@@ -261,13 +255,13 @@ class BaseTool(ABC):
     runtime: ToolRuntime = ToolRuntime.LOCAL
 
     # --- Dependencies ---
-    # For API tools, add "env:ENVVAR_NAME" to signal required API keys
+    # "python:module", "cmd:binary" or "env:VAR" entries checked by get_status()
     dependencies: list[str] = []
     install_instructions: str = ""
 
     # --- Capabilities ---
     capability: str = "generic"
-    provider: str = "openmontage"
+    provider: str = "opendrawer"
     capabilities: list[str] = []
     input_schema: dict = {}
     output_schema: dict = {}
@@ -292,21 +286,19 @@ class BaseTool(ABC):
     fallback_tools: list[str] = []
 
     # --- Agent skills (Layer 3 references) ---
-    # Names of installed agent skills in .agents/skills/ that teach the
-    # underlying technology. The orchestrator uses these to load relevant
-    # API knowledge when planning tool usage.
+    # Names of agent skills in .agents/skills/ that teach the underlying
+    # technology (diffusers low-VRAM tricks, ComfyUI, ...). The agent reads
+    # them before planning tool usage.
     agent_skills: list[str] = []
+
+    # --- Models (keys of models.yaml) ---
+    # Weights this tool needs on disk. Used by the model registry to report
+    # what is missing and by `--commercial-safe` to refuse restricted models.
+    required_models: list[str] = []
 
     # --- Verification ---
     user_visible_verification: list[str] = []
 
-    # --- Optional telemetry / quality hints for the scoring engine ---
-    # If set (0.0-1.0), lib/scoring.py uses these directly instead of falling
-    # back to stability-based heuristics. Leave unset unless the tool has a
-    # real measured or well-calibrated value.
-    quality_score: Optional[float] = None
-    historical_success_rate: Optional[float] = None
-    latency_p50_seconds: Optional[float] = None
 
     # ---- Status reporting ----
 
@@ -384,16 +376,10 @@ class BaseTool(ABC):
             "agent_skills": self.agent_skills,
             "related_skills": self.agent_skills,
             "user_visible_verification": self.user_visible_verification,
-            "quality_score": self.quality_score,
-            "historical_success_rate": self.historical_success_rate,
-            "latency_p50_seconds": self.latency_p50_seconds,
+            "required_models": self.required_models,
         }
 
-    # ---- Cost estimation ----
-
-    def estimate_cost(self, inputs: dict[str, Any]) -> float:
-        """Estimate cost in USD for the given inputs. Override for paid tools."""
-        return 0.0
+    # ---- Runtime estimation ----
 
     def estimate_runtime(self, inputs: dict[str, Any]) -> float:
         """Estimate runtime in seconds. Override for long-running tools."""
@@ -415,20 +401,9 @@ class BaseTool(ABC):
         ...
 
     def dry_run(self, inputs: dict[str, Any]) -> dict[str, Any]:
-        """Preflight check without side effects. Override for paid/publishing tools."""
-        from tools.provider_pricing import PriceQuoteRequired
-
-        quote_error = None
-        try:
-            estimated_cost = self.estimate_cost(inputs)
-        except PriceQuoteRequired as exc:
-            estimated_cost = None
-            quote_error = str(exc)
+        """Preflight check without side effects."""
         return {
             "tool": self.name,
-            "estimated_cost_usd": estimated_cost,
-            "cost_status": "quote_required" if quote_error else "estimated",
-            "quote_reason": quote_error,
             "estimated_runtime_seconds": self.estimate_runtime(inputs),
             "status": self.get_status().value,
             "would_execute": True,
@@ -460,8 +435,8 @@ class BaseTool(ABC):
                 text=True,
                 # Force UTF-8 decoding. The default uses the OS locale (cp1252 on
                 # Windows), which raises UnicodeDecodeError on a subprocess that
-                # emits Unicode/emoji (e.g. Remotion's progress output), killing the
-                # reader thread and potentially swallowing the real error text.
+                # emits Unicode/emoji, killing the reader thread and potentially
+                # swallowing the real error text.
                 encoding="utf-8",
                 errors="replace",
                 timeout=timeout,

@@ -1,0 +1,238 @@
+# OpenDrawer — catalogue des modèles locaux
+#
+# Chaque entrée décrit un jeu de poids téléchargeable SANS compte (Hugging Face
+# public, GitHub releases). `python -m opendrawer models download <clé|preset>`
+# les place dans models/<clé>/ (ou OPENDRAWER_MODELS_DIR).
+#
+# commercial_safe: true  → licence permissive vérifiée, autorisé avec --commercial-safe
+# commercial_safe: false → non commercial OU licence non vérifiée : refusé avec --commercial-safe
+#
+# Les licences évoluent : vérifiez la fiche du modèle avant tout usage commercial.
+
+presets:
+  # Qualité maximale (défaut) — SDXL avec déchargement CPU sur les petites cartes.
+  sdxl:
+    - sdxl_base
+    - sdxl_vae_fp16_fix
+    - sdxl_controlnet_canny
+    - ip_adapter_sdxl_plus_face
+    - ip_adapter_image_encoder
+    - lineart_annotators
+    - owlv2
+  # Plus rapide, tient entièrement dans 6 Go.
+  sd15:
+    - sd15_base
+    - sd15_controlnet_canny
+    - ip_adapter_sd15_plus_face
+    - ip_adapter_image_encoder
+    - lineart_annotators
+    - owlv2
+  # Ressemblance renforcée (non commercial : dépend d'InsightFace).
+  faceid:
+    - ip_adapter_faceid_sdxl
+    - ip_adapter_faceid_sd15
+  # Détection de visages légère.
+  analysis:
+    - yunet_face
+    - owlv2
+
+models:
+  sdxl_base:
+    kind: huggingface
+    repo: stabilityai/stable-diffusion-xl-base-1.0
+    family: sdxl
+    role: base
+    license: CreativeML Open RAIL++-M
+    commercial_safe: true
+    approx_size_mb: 7000
+    allow_patterns:
+      - model_index.json
+      - scheduler/*
+      - tokenizer/*
+      - tokenizer_2/*
+      - text_encoder/config.json
+      - text_encoder/model.fp16.safetensors
+      - text_encoder_2/config.json
+      - text_encoder_2/model.fp16.safetensors
+      - unet/config.json
+      - unet/diffusion_pytorch_model.fp16.safetensors
+      - vae/config.json
+      - vae/diffusion_pytorch_model.fp16.safetensors
+
+  sdxl_vae_fp16_fix:
+    kind: huggingface
+    repo: madebyollin/sdxl-vae-fp16-fix
+    family: sdxl
+    role: vae
+    license: MIT
+    commercial_safe: true
+    approx_size_mb: 330
+    allow_patterns:
+      - config.json
+      - diffusion_pytorch_model.safetensors
+
+  sdxl_controlnet_canny:
+    kind: huggingface
+    repo: diffusers/controlnet-canny-sdxl-1.0-small
+    family: sdxl
+    role: controlnet
+    license: CreativeML Open RAIL++-M
+    commercial_safe: true
+    approx_size_mb: 320
+    allow_patterns:
+      - config.json
+      - diffusion_pytorch_model.fp16.safetensors
+
+  sd15_base:
+    kind: huggingface
+    repo: stable-diffusion-v1-5/stable-diffusion-v1-5
+    family: sd15
+    role: base
+    license: CreativeML Open RAIL-M
+    commercial_safe: true
+    approx_size_mb: 2600
+    allow_patterns:
+      - model_index.json
+      - scheduler/*
+      - tokenizer/*
+      - feature_extractor/*
+      - text_encoder/config.json
+      - text_encoder/model.fp16.safetensors
+      - unet/config.json
+      - unet/diffusion_pytorch_model.fp16.safetensors
+      - vae/config.json
+      - vae/diffusion_pytorch_model.fp16.safetensors
+
+  sd15_controlnet_canny:
+    kind: huggingface
+    repo: lllyasviel/control_v11p_sd15_canny
+    family: sd15
+    role: controlnet
+    license: CreativeML Open RAIL-M
+    commercial_safe: true
+    approx_size_mb: 730
+    allow_patterns:
+      - config.json
+      - diffusion_pytorch_model.fp16.safetensors
+
+  ip_adapter_sdxl_plus_face:
+    kind: huggingface
+    repo: h94/IP-Adapter
+    family: sdxl
+    role: ip_adapter
+    license: Apache-2.0
+    commercial_safe: true
+    approx_size_mb: 850
+    weight_name: ip-adapter-plus-face_sdxl_vit-h.safetensors
+    subfolder: sdxl_models
+    allow_patterns:
+      - sdxl_models/ip-adapter-plus-face_sdxl_vit-h.safetensors
+
+  ip_adapter_sd15_plus_face:
+    kind: huggingface
+    repo: h94/IP-Adapter
+    family: sd15
+    role: ip_adapter
+    license: Apache-2.0
+    commercial_safe: true
+    approx_size_mb: 100
+    weight_name: ip-adapter-plus-face_sd15.safetensors
+    subfolder: models
+    allow_patterns:
+      - models/ip-adapter-plus-face_sd15.safetensors
+
+  ip_adapter_image_encoder:
+    kind: huggingface
+    repo: h94/IP-Adapter
+    role: image_encoder
+    license: Apache-2.0
+    commercial_safe: true
+    approx_size_mb: 2500
+    subfolder: models/image_encoder
+    allow_patterns:
+      - models/image_encoder/config.json
+      - models/image_encoder/model.safetensors
+
+  ip_adapter_faceid_sdxl:
+    kind: huggingface
+    repo: h94/IP-Adapter-FaceID
+    family: sdxl
+    role: ip_adapter_faceid
+    license: Non commercial (embeddings InsightFace)
+    commercial_safe: false
+    approx_size_mb: 1100
+    weight_name: ip-adapter-faceid_sdxl.bin
+    allow_patterns:
+      - ip-adapter-faceid_sdxl.bin
+
+  ip_adapter_faceid_sd15:
+    kind: huggingface
+    repo: h94/IP-Adapter-FaceID
+    family: sd15
+    role: ip_adapter_faceid
+    license: Non commercial (embeddings InsightFace)
+    commercial_safe: false
+    approx_size_mb: 100
+    weight_name: ip-adapter-faceid_sd15.bin
+    allow_patterns:
+      - ip-adapter-faceid_sd15.bin
+
+  insightface_buffalo_l:
+    kind: external
+    manager: insightface
+    role: face_embedding
+    license: Non commercial (InsightFace model zoo)
+    commercial_safe: false
+    approx_size_mb: 280
+    notes: Téléchargé automatiquement par la librairie insightface dans ~/.insightface au premier usage.
+
+  lineart_annotators:
+    kind: huggingface
+    repo: lllyasviel/Annotators
+    role: lineart
+    license: Non vérifiée
+    commercial_safe: false
+    approx_size_mb: 230
+    allow_patterns:
+      - sk_model.pth
+      - sk_model2.pth
+      - netG.pth
+
+  owlv2:
+    kind: huggingface
+    repo: google/owlv2-base-patch16-ensemble
+    role: detection
+    license: Apache-2.0
+    commercial_safe: true
+    approx_size_mb: 620
+    allow_patterns:
+      - "*.json"
+      - "*.txt"
+      - model.safetensors
+
+  yunet_face:
+    kind: url
+    role: face_detection
+    url: https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+    filename: face_detection_yunet_2023mar.onnx
+    license: MIT
+    commercial_safe: true
+    approx_size_mb: 1
+
+  rembg_birefnet_portrait:
+    kind: external
+    manager: rembg
+    role: segmentation
+    license: MIT
+    commercial_safe: true
+    approx_size_mb: 900
+    notes: Téléchargé automatiquement par rembg dans ~/.u2net au premier usage.
+
+  rembg_isnet_general:
+    kind: external
+    manager: rembg
+    role: segmentation
+    license: Apache-2.0
+    commercial_safe: true
+    approx_size_mb: 170
+    notes: Téléchargé automatiquement par rembg dans ~/.u2net au premier usage.

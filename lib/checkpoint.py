@@ -16,63 +16,37 @@ import jsonschema
 
 from schemas.artifacts import ARTIFACT_NAMES, validate_artifact
 
-# All known stages across all pipelines (used only for artifact name lookup).
-ALL_KNOWN_STAGES = frozenset([
-    "research", "proposal", "idea", "script", "scene_plan",
-    "assets", "edit", "compose", "publish",
-])
-
-# Backward-compatible alias — existing code / tests that import STAGES still work.
-# New code should use get_pipeline_stages(pipeline_type) instead.
-STAGES = ["research", "proposal", "idea", "script", "scene_plan",
-          "assets", "edit", "compose", "publish"]
-
-CANONICAL_STAGE_ARTIFACTS = {
-    "research": "research_brief",
-    "proposal": "proposal_packet",
-    "idea": "brief",
-    "script": "script",
-    "scene_plan": "scene_plan",
-    "assets": "asset_manifest",
-    "edit": "edit_decisions",
-    "compose": "render_report",
-    "publish": "publish_log",
-}
-
-# Additional artifacts that may be produced alongside canonical ones.
-# These are not stage-defining but are required by governance contracts.
-SUPPLEMENTARY_ARTIFACTS = {
-    "source_media_review",  # Required before first planning stage when user media exists
-    "final_review",         # Required by compose stage before presenting to user
-    "video_analysis_brief", # Reference-video grounding artifact carried alongside stages
-}
-
-
 def get_pipeline_stages(pipeline_type: str | None) -> list[str]:
-    """Return the ordered stage list for a specific pipeline.
-
-    Falls back to STAGES (deterministic canonical order) when pipeline_type
-    is not provided or the manifest cannot be loaded.
-
-    Previous versions used a set intersection here, which produced
-    nondeterministic ordering. The fallback now uses a stable list.
-    """
-    if pipeline_type is None:
-        # Deterministic canonical fallback — sorted to ensure stable ordering
-        import logging
-        logging.getLogger(__name__).warning(
-            "get_pipeline_stages called without pipeline_type — "
-            "using canonical fallback order. Pass pipeline_type for correctness."
-        )
-        return list(STAGES)
-
+    """Return the ordered stage list for a specific pipeline (empty if unknown)."""
+    if not pipeline_type:
+        return []
     try:
         from lib.pipeline_loader import load_pipeline_readonly, get_stage_order
         manifest = load_pipeline_readonly(pipeline_type)
         return get_stage_order(manifest)
-    except (FileNotFoundError, Exception):
-        # Graceful fallback: return all known stages in canonical order
-        return list(STAGES)
+    except Exception:
+        return []
+
+
+def all_known_stages() -> set[str]:
+    """Union of stage names across every pipeline manifest."""
+    from lib.pipeline_loader import list_pipelines
+    stages: set[str] = set()
+    for name in list_pipelines():
+        stages.update(get_pipeline_stages(name))
+    return stages
+
+
+def get_stage_required_artifacts(pipeline_type: str | None, stage: str) -> list[str]:
+    """Artifacts a stage must carry when completed (its manifest ``produces``)."""
+    if not pipeline_type:
+        return []
+    try:
+        from lib.pipeline_loader import load_pipeline_readonly, get_stage_produces
+        return get_stage_produces(load_pipeline_readonly(pipeline_type), stage)
+    except Exception:
+        return []
+
 
 CHECKPOINT_SCHEMA_PATH = (
     Path(__file__).resolve().parent.parent
@@ -90,28 +64,39 @@ from lib.paths import PROJECTS_DIR  # noqa: E402  (single source of truth)
 PROJECT_MARKER_FILENAME = "project.json"
 HISTORY_DIRNAME = "history"
 
+# Canonical layout of a project directory (see docs/ARCHITECTURE.md).
+PROJECT_SUBDIRS = (
+    "artifacts",
+    "input",
+    "assets/intake",
+    "assets/cartoon",
+    "assets/line_art",
+    "assets/regions",
+    "output",
+)
+
 
 class CheckpointValidationError(ValueError):
     """Raised when a checkpoint or its canonical artifacts are invalid."""
 
 
-def _validate_style_playbook(style_playbook: str | None) -> None:
-    """Fail closed when a checkpoint names a visual identity that cannot load."""
+def _validate_style(style: str | None) -> None:
+    """Fail closed when a checkpoint names a cartoon style that cannot load."""
 
-    if style_playbook is None:
+    if style is None:
         return
     try:
-        from styles.playbook_loader import list_playbooks, load_playbook
+        from styles.style_loader import list_styles, load_style
 
-        load_playbook(style_playbook)
+        load_style(style)
     except Exception as exc:
         try:
-            available = list_playbooks()
+            available = list_styles()
         except Exception:
             available = []
         raise CheckpointValidationError(
-            f"Unknown or invalid style_playbook {style_playbook!r}. "
-            f"Available playbooks: {available}. Underlying error: {exc}"
+            f"Unknown or invalid style {style!r}. "
+            f"Available styles: {available}. Underlying error: {exc}"
         ) from exc
 
 
@@ -122,25 +107,23 @@ def _load_checkpoint_schema() -> dict[str, Any]:
 
 
 def _validate_artifacts_for_stage(
+    pipeline_type: str | None,
     stage: str,
     status: str,
     artifacts: dict[str, Any],
 ) -> None:
-    # Valid stages come from the pipeline manifest (get_pipeline_stages), which
-    # can declare stages beyond the 9 canonical ones (e.g. character-animation's
-    # `character_design`/`rig_plan`, screen-demo's `real_capture`). Those have no
-    # canonical artifact, so look it up defensively — a missing entry means the
-    # stage simply has no required artifact, not a crash.
-    required_artifact = CANONICAL_STAGE_ARTIFACTS.get(stage)
-    if (
-        required_artifact is not None
-        and status in {"completed", "awaiting_human"}
-        and required_artifact not in artifacts
-    ):
-        raise CheckpointValidationError(
-            f"Stage {stage!r} with status {status!r} must include "
-            f"canonical artifact {required_artifact!r}"
-        )
+    # Required artifacts come from the stage's ``produces`` list in the
+    # pipeline manifest — the manifest is the single source of truth.
+    if status in {"completed", "awaiting_human"}:
+        missing = [
+            name for name in get_stage_required_artifacts(pipeline_type, stage)
+            if name not in artifacts
+        ]
+        if missing:
+            raise CheckpointValidationError(
+                f"Stage {stage!r} with status {status!r} must include "
+                f"artifacts {missing}"
+            )
 
     for artifact_name, artifact_data in artifacts.items():
         if artifact_name not in ARTIFACT_NAMES:
@@ -161,17 +144,14 @@ def validate_checkpoint(checkpoint: dict[str, Any]) -> None:
     """Validate checkpoint structure and canonical artifact payloads.
 
     Uses pipeline_type (if present) to resolve the valid stage list.
-    Falls back to ALL_KNOWN_STAGES when pipeline_type is absent.
+    Falls back to the union of all manifests' stages when it is absent.
     """
     stage = checkpoint.get("stage")
     status = checkpoint.get("status")
     artifacts = checkpoint.get("artifacts")
     pipeline_type = checkpoint.get("pipeline_type")
 
-    valid_stages = (
-        set(get_pipeline_stages(pipeline_type)) if pipeline_type
-        else ALL_KNOWN_STAGES
-    )
+    valid_stages = set(get_pipeline_stages(pipeline_type)) or all_known_stages()
 
     if not isinstance(stage, str) or stage not in valid_stages:
         raise CheckpointValidationError(
@@ -183,7 +163,7 @@ def validate_checkpoint(checkpoint: dict[str, Any]) -> None:
     if not isinstance(artifacts, dict):
         raise CheckpointValidationError("Checkpoint artifacts must be a dictionary")
 
-    _validate_artifacts_for_stage(stage, status, artifacts)
+    _validate_artifacts_for_stage(pipeline_type, stage, status, artifacts)
 
     try:
         jsonschema.validate(instance=checkpoint, schema=_load_checkpoint_schema())
@@ -201,7 +181,8 @@ def init_project(
     title: str,
     pipeline_type: str,
     pipeline_dir: Optional[Path] = None,
-    style_playbook: Optional[str] = None,
+    style: Optional[str] = None,
+    extra: Optional[dict[str, Any]] = None,
 ) -> Path:
     """Initialize a project workspace with the canonical layout + marker file.
 
@@ -210,19 +191,13 @@ def init_project(
     identity and stage rail before the first checkpoint exists.
 
     Idempotent: re-running preserves the original created_at and merges fields.
-    Returns the project directory.
+    ``extra`` merges run settings (difficulty, commercial_safe, book_id...)
+    into the marker. Returns the project directory.
     """
-    _validate_style_playbook(style_playbook)
+    _validate_style(style)
     base = pipeline_dir or PROJECTS_DIR
     project_dir = base / project_id
-    for sub in (
-        "artifacts",
-        "assets/images",
-        "assets/video",
-        "assets/audio",
-        "assets/music",
-        "renders",
-    ):
+    for sub in PROJECT_SUBDIRS:
         (project_dir / sub).mkdir(parents=True, exist_ok=True)
 
     marker_path = project_dir / PROJECT_MARKER_FILENAME
@@ -239,8 +214,10 @@ def init_project(
     marker["project_id"] = project_id
     marker["title"] = title
     marker["pipeline_type"] = pipeline_type
-    if style_playbook is not None:
-        marker["style_playbook"] = style_playbook
+    if style is not None:
+        marker["style"] = style
+    if extra:
+        marker.update(extra)
 
     with open(marker_path, "w", encoding="utf-8") as f:
         json.dump(marker, f, indent=2)
@@ -427,12 +404,11 @@ def write_checkpoint(
     artifacts: dict[str, Any],
     *,
     pipeline_type: Optional[str] = None,
-    style_playbook: Optional[str] = None,
+    style: Optional[str] = None,
     checkpoint_policy: str = "guided",
     human_approval_required: bool = False,
     human_approved: bool = False,
     review: Optional[dict] = None,
-    cost_snapshot: Optional[dict] = None,
     error: Optional[str] = None,
     metadata: Optional[dict] = None,
 ) -> Path:
@@ -441,7 +417,7 @@ def write_checkpoint(
     # cannot bypass either gate enforcement or style validation.
     marker = None
     marker_path = pipeline_dir / project_id / PROJECT_MARKER_FILENAME
-    if marker_path.exists() and (not pipeline_type or not style_playbook):
+    if marker_path.exists() and (not pipeline_type or not style):
         try:
             with open(marker_path, encoding="utf-8") as f:
                 marker = json.load(f)
@@ -450,14 +426,11 @@ def write_checkpoint(
     if isinstance(marker, dict):
         if not pipeline_type and marker.get("pipeline_type"):
             pipeline_type = marker["pipeline_type"]
-        if not style_playbook and marker.get("style_playbook"):
-            style_playbook = marker["style_playbook"]
-    _validate_style_playbook(style_playbook)
+        if not style and marker.get("style"):
+            style = marker["style"]
+    _validate_style(style)
 
-    valid_stages = (
-        set(get_pipeline_stages(pipeline_type)) if pipeline_type
-        else ALL_KNOWN_STAGES
-    )
+    valid_stages = set(get_pipeline_stages(pipeline_type)) or all_known_stages()
     if stage not in valid_stages:
         raise ValueError(
             f"Invalid stage: {stage!r} for pipeline {pipeline_type!r}. "
@@ -513,36 +486,19 @@ def write_checkpoint(
         "human_approved": human_approved,
         "artifacts": artifacts,
     }
-    if style_playbook is not None:
-        checkpoint["style_playbook"] = style_playbook
+    if style is not None:
+        checkpoint["style"] = style
     if review is not None:
         checkpoint["review"] = review
-    if cost_snapshot is not None:
-        checkpoint["cost_snapshot"] = cost_snapshot
     if error is not None:
         checkpoint["error"] = error
     if metadata is not None:
         checkpoint["metadata"] = metadata
 
-    # Merge decision_log: if this checkpoint carries new decisions,
-    # append them to the project-level decision log file, then write the
-    # reference back into relevant artifacts so downstream consumers can find it.
+    # Merge decision_log: if this checkpoint carries new decisions, append
+    # them to the project-level decision log file (cumulative audit trail).
     if "decision_log" in artifacts and isinstance(artifacts["decision_log"], dict):
         _merge_decision_log(pipeline_dir, project_id, artifacts["decision_log"])
-        log_ref = str(_decision_log_path(pipeline_dir, project_id))
-
-        # Write decision_log_ref into proposal_packet and render_report
-        # artifacts if they are present in this checkpoint.
-        for artifact_key in ("proposal_packet", "render_report"):
-            if artifact_key in artifacts and isinstance(artifacts[artifact_key], dict):
-                plan_or_top = artifacts[artifact_key]
-                # proposal_packet stores it under production_plan
-                if artifact_key == "proposal_packet":
-                    plan = plan_or_top.get("production_plan")
-                    if isinstance(plan, dict):
-                        plan["decision_log_ref"] = log_ref
-                else:
-                    plan_or_top["decision_log_ref"] = log_ref
 
     validate_checkpoint(checkpoint)
 
@@ -622,10 +578,18 @@ def get_next_stage(
 ) -> Optional[str]:
     """Determine the next stage to run based on completed checkpoints.
 
-    Uses pipeline-specific stage order so that pipelines with different
-    stage sequences (e.g. cinematic vs explainer) progress correctly.
+    Uses the pipeline-specific stage order. When pipeline_type is omitted it
+    is read from the project marker.
     """
-    stages = get_pipeline_stages(pipeline_type) if pipeline_type else STAGES
+    if not pipeline_type:
+        marker_path = pipeline_dir / project_id / PROJECT_MARKER_FILENAME
+        if marker_path.exists():
+            try:
+                with open(marker_path, encoding="utf-8") as f:
+                    pipeline_type = json.load(f).get("pipeline_type")
+            except (OSError, json.JSONDecodeError):
+                pipeline_type = None
+    stages = get_pipeline_stages(pipeline_type)
     completed = set(get_completed_stages(pipeline_dir, project_id, pipeline_type))
     for stage in stages:
         if stage not in completed:

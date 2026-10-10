@@ -1,0 +1,53 @@
+# Style "livre jeunesse classique" : rond, mignon, tête légèrement plus grosse,
+# contours noirs nets, aplats de couleur sans ombrage (facile à transformer en
+# coloriage). Les prompts sont en anglais : les modèles SD/SDXL les comprennent mieux.
+name: livre-jeunesse
+version: "1.0"
+label_fr: Livre jeunesse classique
+description: >
+  Illustration d'album pour enfants : formes arrondies et mignonnes, tête
+  légèrement agrandie, contours noirs épais et nets, aplats de couleurs.
+
+prompt:
+  # {subject} est remplacé par la description du sujet (ex. "a smiling little girl").
+  positive: >
+    children's picture book illustration of {subject}, cute cartoon character,
+    soft rounded shapes, slightly oversized head, big friendly eyes,
+    clean bold black outlines, flat cel colors, no shading, no gradients,
+    simple shapes, plain white background, centered, full figure visible
+  negative: >
+    photo, photorealistic, realistic skin texture, 3d render, cgi, shadows,
+    gradient, airbrush, noise, grain, texture, sketch, hatching, text, letters,
+    watermark, signature, frame, border, background scenery, landscape,
+    extra limbs, extra fingers, deformed hands, blurry, low quality
+  subject_defaults:
+    person: a smiling person
+    child: a smiling child
+    adult: a smiling adult
+    dog: a happy dog
+    cat: a cute cat
+    animal: a cute animal
+
+# Paramètres de génération par famille de modèle.
+generation:
+  sdxl:
+    width_long_side: 1024
+    steps: 30
+    guidance_scale: 6.0
+    strength: 0.72            # 0 = photo inchangée, 1 = ignore la photo
+    controlnet_scale: 0.55    # fidélité aux contours de la photo
+    ip_adapter_scale: 0.6     # fidélité au visage
+  sd15:
+    width_long_side: 768
+    steps: 30
+    guidance_scale: 7.0
+    strength: 0.7
+    controlnet_scale: 0.7
+    ip_adapter_scale: 0.6
+
+# Rendu OpenCV (secours sans GPU / aperçu rapide).
+opencv:
+  smoothing_passes: 6
+  colors: 10
+  edge_block_size: 9
+  edge_c: 4

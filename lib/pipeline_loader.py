@@ -85,16 +85,6 @@ def _condition_is_active(condition: Optional[str], context: Optional[dict[str, A
     return bool(context.get(condition))
 
 
-def get_reference_input_config(manifest: dict) -> dict[str, Any]:
-    """Return reference-input configuration, defaulting to disabled."""
-    return manifest.get("reference_input", {}) or {}
-
-
-def pipeline_supports_reference_input(manifest: dict) -> bool:
-    """Whether the manifest declares support for reference-video input."""
-    return bool(get_reference_input_config(manifest).get("supported", False))
-
-
 def get_stage_sub_stages(
     manifest: dict,
     stage_name: str,
@@ -150,15 +140,15 @@ def get_stage_order(
 
 
 def get_required_tools(manifest: dict) -> set[str]:
-    """Collect tools across stages, sub-stages, and reference-input analysis."""
+    """Collect tools across stages and sub-stages."""
     tools: set[str] = set()
     for stage in manifest["stages"]:
-        tools.update(stage.get("preferred_tools", []))
+        tools.update(stage.get("required_tools", []))
+        tools.update(stage.get("optional_tools", []))
         tools.update(stage.get("fallback_tools", []))
         tools.update(stage.get("tools_available", []))
         for sub_stage in stage.get("sub_stages", []):
             tools.update(sub_stage.get("tools_available", []))
-    tools.update(get_reference_input_config(manifest).get("analysis_tools", []))
     return tools
 
 
@@ -180,6 +170,14 @@ def get_stage_human_approval_default(manifest: dict, stage_name: str) -> Optiona
         if stage["name"] == stage_name:
             return bool(stage.get("human_approval_default", False))
     return None
+
+
+def get_stage_produces(manifest: dict, stage_name: str) -> list[str]:
+    """Artifacts a stage must produce (from its ``produces`` list)."""
+    for stage in manifest["stages"]:
+        if stage["name"] == stage_name:
+            return list(stage.get("produces", []))
+    return []
 
 
 def get_stage_review_focus(manifest: dict, stage_name: str) -> list[str]:
@@ -206,13 +204,13 @@ def check_extension_permitted(
 
     Args:
         manifest: Loaded pipeline manifest dict.
-        extension_type: One of 'custom_scripts', 'custom_playbooks',
+        extension_type: One of 'custom_scripts', 'custom_styles',
                         'custom_skills', 'custom_tools'.
 
     Raises:
         ExtensionNotPermitted: If the extension is not allowed.
     """
-    valid_extensions = {"custom_scripts", "custom_playbooks", "custom_skills", "custom_tools"}
+    valid_extensions = {"custom_scripts", "custom_styles", "custom_skills", "custom_tools"}
     if extension_type not in valid_extensions:
         raise ValueError(
             f"Unknown extension type {extension_type!r}. "
@@ -232,7 +230,7 @@ def get_permitted_extensions(manifest: dict) -> dict[str, bool]:
     """Return the extension permission flags for a pipeline."""
     defaults = {
         "custom_scripts": False,
-        "custom_playbooks": False,
+        "custom_styles": False,
         "custom_skills": False,
         "custom_tools": False,
     }

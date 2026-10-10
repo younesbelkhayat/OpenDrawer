@@ -1,0 +1,74 @@
+name: coloring-book
+version: "1.0"
+description: >
+  Un dossier de photos devient un livre de coloriage multi-pages. Chaque photo
+  est traitée comme un projet coloring-page indépendant (avec ses propres
+  checkpoints), puis les pages validées sont rassemblées dans un dossier livre
+  numéroté avec une planche-sommaire.
+category: coloring
+stability: beta
+compatible_styles:
+  - livre-jeunesse
+required_skills:
+  - meta/reviewer
+  - meta/checkpoint-protocol
+
+stages:
+  - name: collect
+    skill: pipelines/coloring-book/collect-director
+    produces: [book_manifest]
+    tools_available: [subject_detect]
+    review_focus:
+      - Toutes les photos du dossier sont listées, dans l'ordre voulu
+      - Photos illisibles ou sans sujet signalées
+    checkpoint_required: true
+    human_approval_default: false
+
+  - name: pages
+    skill: pipelines/coloring-book/pages-director
+    required_artifacts_in: [book_manifest]
+    produces: [book_manifest]
+    tools_available:
+      - subject_detect
+      - bg_remove
+      - palette_extract
+      - cartoonize
+      - diffusers_cartoonize
+      - comfyui_cartoonize
+      - opencv_cartoonize
+      - lineart_extract
+      - region_segment
+      - vectorize_svg
+      - page_layout
+      - coloring_qa
+    review_focus:
+      - Chaque page a passé ses propres checkpoints coloring-page
+      - Difficulté et style homogènes d'une page à l'autre
+    checkpoint_required: true
+    human_approval_default: true
+    sub_stages:
+      - name: page_run
+        description: Exécution complète de la pipeline coloring-page pour une photo
+        human_approval_default: true
+
+  - name: assemble
+    skill: pipelines/coloring-book/assemble-director
+    required_artifacts_in: [book_manifest]
+    produces: [book_manifest]
+    required_tools: [book_assemble]
+    tools_available: [book_assemble]
+    review_focus:
+      - Pages numérotées dans l'ordre, aucune manquante
+      - Planche-sommaire lisible
+    checkpoint_required: true
+    human_approval_default: true
+
+default_checkpoint_policy: guided
+orchestration:
+  max_revisions_per_stage: 3
+  max_review_rounds: 2
+extensions:
+  custom_scripts: false
+  custom_styles: true
+  custom_skills: true
+  custom_tools: false

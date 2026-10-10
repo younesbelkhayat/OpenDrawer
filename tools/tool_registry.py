@@ -53,7 +53,7 @@ def _scrub_unicode_dashes(value: Any) -> Any:
 
 
 class ToolRegistry:
-    """Central registry of all OpenMontage tools."""
+    """Central registry of all OpenDrawer tools."""
 
     def __init__(self) -> None:
         self._tools: dict[str, BaseTool] = {}
@@ -85,7 +85,7 @@ class ToolRegistry:
 
     @staticmethod
     def _load_dotenv() -> None:
-        """Load .env file into os.environ if present, so tools can find API keys."""
+        """Load .env file into os.environ if present, so tools see local settings."""
         from pathlib import Path
         import os
         env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -247,22 +247,20 @@ class ToolRegistry:
         return summary
 
     def provider_menu(self) -> dict[str, dict[str, Any]]:
-        """Generate a capability-grouped provider menu for user-facing display.
+        """Capability-grouped menu of tools for the agent's preflight report.
 
         Returns a dict like:
         {
-            "video_generation": {
-                "available": [{"name": ..., "provider": ..., "best_for": ...}],
-                "unavailable": [{"name": ..., "provider": ..., "install_instructions": ...}],
-                "total": 12,
-                "configured": 2,
+            "cartoonize": {
+                "available": [{"name": ..., "provider": ..., "runtime": ...}],
+                "unavailable": [{"name": ..., "install_instructions": ...}],
+                "total": 3,
+                "configured": 1,
             },
             ...
         }
 
-        This powers the agent's preflight provider menu — the agent reads this
-        output and presents it to the user.  Adding a new tool to tools/ is
-        enough; this method auto-discovers it.
+        Adding a new tool to tools/ is enough; this method auto-discovers it.
         """
         self.ensure_discovered()
         menu: dict[str, dict[str, Any]] = {}
@@ -275,30 +273,17 @@ class ToolRegistry:
             if cap not in menu:
                 menu[cap] = {"available": [], "unavailable": [], "total": 0, "configured": 0}
 
-            info = tool.get_info()
             status = tool.get_status()
             entry = {
                 "name": tool.name,
                 "provider": tool.provider,
                 "runtime": tool.runtime.value,
                 "best_for": tool.best_for,
-                "dependencies": info.get("dependencies", []),
+                "dependencies": list(tool.dependencies),
+                "required_models": list(tool.required_models),
                 "install_instructions": tool.install_instructions,
                 "status": status.value,
             }
-            for extra_key in (
-                "source_provider_menu",
-                "source_provider_summary",
-                "render_engines",
-                "remotion_note",
-                "provider_matrix",
-                "setup_offer",
-                "operation_statuses",
-                "resource_profiles",
-                "resource_profile_note",
-            ):
-                if extra_key in info:
-                    entry[extra_key] = info[extra_key]
 
             if status == ToolStatus.AVAILABLE:
                 menu[cap]["available"].append(entry)
@@ -314,164 +299,71 @@ class ToolRegistry:
         return dict(sorted(menu.items()))
 
     def provider_menu_summary(self) -> dict[str, Any]:
-        """Compact, human-ready rollup of provider_menu() for onboarding/preflight.
-
-        Returns a dict shaped for the "N of M configured" capability menu the
-        agent is supposed to present to the user per AGENT_GUIDE.md → "Provider
-        Menu (Mandatory at Preflight)". Collapses the firehose of
-        support_envelope() into something the agent can paraphrase in plain
-        language in a few lines.
+        """Compact, human-ready rollup for onboarding/preflight.
 
         Example output (abbreviated):
         {
-          "composition_runtimes": {
-            "ffmpeg": True,
-            "remotion": True,
-            "hyperframes": True,
-          },
+          "hardware": {"cuda": True, "gpu_name": "RTX 2060", "vram_mb": 6144, ...},
           "capabilities": [
-            {"capability": "video_generation", "configured": 10, "total": 16,
-             "available_providers": ["fal", "heygen", ...],
-             "unavailable_providers": ["openai", ...]},
+            {"capability": "cartoonize", "configured": 2, "total": 3,
+             "available_tools": ["opencv_cartoonize", "diffusers_cartoonize"],
+             "unavailable_tools": ["comfyui_cartoonize"]},
             ...
           ],
-          "setup_offers": [
-             {"capability": "music_generation", "tool": "suno_music",
-              "install_instructions": "Add SUNO_API_KEY to .env"},
-             ...
-          ],
-          "runtime_warnings": [
-             "hyperframes: npm package `hyperframes` not resolvable: ...",
-             ...
-          ],
+          "missing_models": ["sdxl_base", ...],
+          "install_hints": [{"tool": ..., "install_instructions": ...}],
         }
 
-        Agents should use this as the source for the preflight capability
-        menu rather than rendering `support_envelope()` or `provider_menu()`
-        raw. See AGENT_GUIDE.md > "Provider Menu (Mandatory at Preflight)".
+        Agents should present this rather than the raw support_envelope().
         """
         self.ensure_discovered()
         menu = self.provider_menu()
 
-        # Composition runtimes — lift from video_compose.get_info() since
-        # they're the signal the runtime-selection contract depends on.
-        comp_runtimes: dict[str, bool] = {}
-        runtime_warnings: list[str] = []
-        vc = self._tools.get("video_compose")
-        if vc is not None:
-            info = vc.get_info()
-            engines = info.get("render_engines") or {}
-            comp_runtimes = {k: bool(v) for k, v in engines.items()}
-        # If hyperframes_compose is registered, surface its npm-resolve reasons
-        # explicitly — those are the "looks available but isn't" failures.
-        hf = self._tools.get("hyperframes_compose")
-        if hf is not None:
-            hf_info = hf.get_info()
-            rc = hf_info.get("hyperframes_runtime") or {}
-            for reason in rc.get("reasons") or []:
-                runtime_warnings.append(f"hyperframes: {reason}")
-
-        # Capabilities rollup (configured/total + provider lists).
-        # When a provider has multiple tools (e.g. seedance-fal and
-        # seedance-replicate both reporting provider="seedance"), a
-        # naive set-split shows the provider in BOTH available and
-        # unavailable — confusing for users. Dedupe: if the provider has
-        # any available tool, do NOT list it as unavailable.
         capabilities: list[dict[str, Any]] = []
+        install_hints: list[dict[str, Any]] = []
         for cap, bucket in menu.items():
-            available_providers = {
-                e.get("provider") for e in bucket.get("available", [])
-            } - {None}
-            unavailable_providers = (
-                {e.get("provider") for e in bucket.get("unavailable", [])}
-                - {None}
-                - available_providers  # provider with any available tool wins
-            )
             capabilities.append(
                 {
                     "capability": cap,
                     "configured": bucket.get("configured", 0),
                     "total": bucket.get("total", 0),
-                    "available_providers": sorted(available_providers),
-                    "unavailable_providers": sorted(unavailable_providers),
+                    "available_tools": [e["name"] for e in bucket.get("available", [])],
+                    "unavailable_tools": [e["name"] for e in bucket.get("unavailable", [])],
                 }
             )
-
-        # Setup offers — unavailable tools that would be 1-minute env-var fixes.
-        # Filter for short install instructions referencing an env var so the
-        # agent can lead with the easy wins.
-        setup_offers: list[dict[str, Any]] = []
-        for cap, bucket in menu.items():
             for entry in bucket.get("unavailable", []):
-                offer = entry.get("setup_offer")
-                if offer:
-                    setup_offers.append(
-                        {
-                            "capability": cap,
-                            "tool": entry.get("name"),
-                            "provider": entry.get("provider"),
-                            "runtime": entry.get("runtime"),
-                            "install_instructions": entry.get("install_instructions") or "",
-                            **offer,
-                        }
-                    )
-                    continue
+                install_hints.append(
+                    {
+                        "capability": cap,
+                        "tool": entry["name"],
+                        "install_instructions": entry.get("install_instructions") or "",
+                    }
+                )
 
-                env_vars = [
-                    dep[4:]
-                    for dep in entry.get("dependencies", [])
-                    if isinstance(dep, str) and dep.startswith("env:")
-                ]
-                if env_vars:
-                    setup_offers.append(
-                        {
-                            "capability": cap,
-                            "tool": entry.get("name"),
-                            "provider": entry.get("provider"),
-                            "runtime": entry.get("runtime"),
-                            "kind": "env_var",
-                            "fix_complexity": "1-minute env-var",
-                            "env_vars": env_vars,
-                            "install_instructions": entry.get("install_instructions") or "",
-                        }
-                    )
-                    continue
+        try:
+            from lib.hardware import detect_hardware
 
-                hint = entry.get("install_instructions") or ""
-                # Heuristic: 1-minute fixes mention an env var or API key.
-                if any(k in hint.lower() for k in ["api key", "env", "_key=", "_api"]):
-                    setup_offers.append(
-                        {
-                            "capability": cap,
-                            "tool": entry.get("name"),
-                            "provider": entry.get("provider"),
-                            "runtime": entry.get("runtime"),
-                            "install_instructions": hint,
-                        }
-                    )
+            hardware = detect_hardware().as_dict()
+        except Exception as exc:  # pragma: no cover - defensive
+            hardware = {"error": str(exc)}
 
-            for entry in bucket.get("available", []) + bucket.get("unavailable", []):
-                if entry.get("resource_profile_note"):
-                    runtime_warnings.append(
-                        f"{entry.get('name')}: {entry.get('resource_profile_note')}"
-                    )
+        try:
+            from lib.model_registry import model_registry
+
+            needed = sorted({m for t in self._tools.values() for m in t.required_models})
+            missing_models = [m for m in needed if not model_registry.is_downloaded(m)]
+        except Exception:
+            missing_models = []
 
         result = {
-            "composition_runtimes": comp_runtimes,
+            "hardware": hardware,
             "capabilities": capabilities,
-            "setup_offers": setup_offers,
-            "runtime_warnings": runtime_warnings,
+            "missing_models": missing_models,
+            "install_hints": install_hints,
         }
-        # Normalize em-dashes and en-dashes to ASCII so preflight output prints
-        # cleanly on Windows cp1252 stdout (the default on Git Bash / PowerShell
-        # without PYTHONIOENCODING=utf-8). Agents paste this dict into chat; a
-        # mojibake `�` in an install_instructions string looks like a bug.
-        # Markdown docs keep their typographic dashes; this only touches the
-        # runtime-reported strings.
+        # Normalize unicode punctuation so preflight output prints cleanly on
+        # Windows cp1252 stdout. Markdown docs keep their typographic dashes.
         return _scrub_unicode_dashes(result)
-
-    # Post-hoc fix: narrow helper that keeps the registry output stdout-safe on
-    # Windows cp1252 without imposing a new style rule on every tool author.
 
     def gpu_required_tools(self) -> list[str]:
         """List tools that require GPU (VRAM > 0)."""
@@ -481,7 +373,7 @@ class ToolRegistry:
         ]
 
     def network_required_tools(self) -> list[str]:
-        """List tools that require network access."""
+        """List tools that require network access (should always be empty)."""
         return [
             t.name for t in self._tools.values()
             if t.resource_profile.network_required

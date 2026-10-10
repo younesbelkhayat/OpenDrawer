@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "opendrawer/styles/style",
+  "title": "Cartoon style preset",
+  "type": "object",
+  "required": ["name", "version", "prompt", "generation"],
+  "properties": {
+    "name": { "type": "string" },
+    "version": { "type": "string" },
+    "label_fr": { "type": "string" },
+    "description": { "type": "string" },
+    "prompt": {
+      "type": "object",
+      "required": ["positive"],
+      "properties": {
+        "positive": { "type": "string", "description": "May contain {subject}" },
+        "negative": { "type": "string" },
+        "subject_defaults": { "type": "object", "additionalProperties": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "generation": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "width_long_side": { "type": "integer", "minimum": 256 },
+          "steps": { "type": "integer", "minimum": 1 },
+          "guidance_scale": { "type": "number" },
+          "strength": { "type": "number", "minimum": 0, "maximum": 1 },
+          "controlnet_scale": { "type": "number", "minimum": 0 },
+          "ip_adapter_scale": { "type": "number", "minimum": 0 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "opencv": {
+      "type": "object",
+      "properties": {
+        "smoothing_passes": { "type": "integer", "minimum": 0 },
+        "colors": { "type": "integer", "minimum": 2 },
+        "edge_block_size": { "type": "integer", "minimum": 3 },
+        "edge_c": { "type": "number" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

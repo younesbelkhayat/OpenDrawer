@@ -14,4 +14,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Overridable for staging/screenshots/tests. Everything — checkpoint writes,
 # event attribution, the Backlot board — follows the same root.
-PROJECTS_DIR = Path(os.environ.get("OPENMONTAGE_PROJECTS_DIR") or (REPO_ROOT / "projects"))
+PROJECTS_DIR = Path(os.environ.get("OPENDRAWER_PROJECTS_DIR") or (REPO_ROOT / "projects"))
+
+# Where model weights live. Hugging Face downloads land in MODELS_DIR/hf so a
+# single folder can be backed up, moved to another disk, or shared between
+# checkouts.
+MODELS_DIR = Path(os.environ.get("OPENDRAWER_MODELS_DIR") or (REPO_ROOT / "models"))

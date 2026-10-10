@@ -1,33 +1,26 @@
-# OpenMontage - Global Configuration
-
-llm:
-  provider: anthropic            # anthropic | openai | gemini | openrouter | ollama | mistral | minimax
-  model: null                    # null = use provider default
-  temperature: 0.7
-  max_tokens: 4096
-
-budget:
-  mode: warn                     # observe | warn | cap
-  total_usd: 10.00
-  reserve_pct: 0.10              # holdback for retries / cleanup
-  single_action_approval_usd: 0.50
-  require_approval_for_new_paid_tool: true
+# OpenDrawer - configuration globale
+# Les options de la ligne de commande remplacent ces valeurs pour une exécution.
 
 checkpoint:
   policy: guided                 # guided | manual_all | auto_noncreative
-  storage_dir: pipeline          # relative to project root
 
-output:
-  default_format: mp4
-  default_codec: libx264
-  default_audio_codec: aac
-  default_resolution: "1920x1080"
-  default_fps: 30
-  default_crf: 23
+generation:
+  backend: auto                  # auto | diffusers | comfyui | opencv
+  family: auto                   # auto | sdxl | sd15  (auto = SDXL dès qu'un GPU est présent)
+  style: livre-jeunesse          # fichier styles/<nom>.yaml
+  candidates: 3                  # nombre de propositions de cartoon par photo
+  identity: auto                 # auto | faceid | plus_face | none
+  seed: null                     # null = aléatoire
 
-paths:
-  pipeline_dir: pipeline
-  library_dir: library
-  styles_dir: styles
-  skills_dir: skills
-  output_dir: output
+coloring:
+  difficulty: medium             # easy/facile | medium/moyen | hard/difficile
+  color_source: photo            # photo = couleurs réelles de la photo | cartoon
+
+page:
+  paper: A4                      # A4 portrait
+  dpi: 300
+  margin_mm: 10
+  thumbnail_ratio: 0.26          # largeur de la vignette colorée / largeur utile
+
+licensing:
+  commercial_safe: false         # true = uniquement des modèles à licence permissive

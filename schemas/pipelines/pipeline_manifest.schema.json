@@ -1,73 +1,85 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "openmontage/pipelines/pipeline_manifest",
+  "$id": "opendrawer/pipelines/pipeline_manifest",
   "title": "Pipeline Manifest",
   "description": "Declarative pipeline definition specifying stages, artifacts, tools, and policies.",
   "type": "object",
-  "required": ["name", "version", "stages"],
+  "required": [
+    "name",
+    "version",
+    "stages"
+  ],
   "properties": {
-    "name": { "type": "string" },
-    "version": { "type": "string" },
-    "description": { "type": "string" },
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
     "category": {
       "type": "string",
-      "enum": ["talking_head", "generated", "hybrid", "screen_recording", "animation", "cinematic", "documentary", "custom"]
+      "enum": [
+        "coloring",
+        "custom"
+      ]
     },
     "stability": {
       "type": "string",
-      "enum": ["production", "beta"],
+      "enum": [
+        "production",
+        "beta"
+      ],
       "description": "Whether this pipeline has been audited and is considered stable"
-    },
-    "compatible_playbooks": {
-      "oneOf": [
-        {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        {
-          "type": "object",
-          "properties": {
-            "recommended": { "type": "array", "items": { "type": "string" } },
-            "also_works": { "type": "array", "items": { "type": "string" } },
-            "custom_allowed": { "type": "boolean", "default": false }
-          }
-        }
-      ]
     },
     "required_skills": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "production_modes": {
       "type": "array",
-      "description": "Mutually exclusive ways this pipeline can be produced. The agent picks one at the idea stage and records it in the brief; the stage director skill reads it to constrain later choices (see skills/pipelines/screen-demo/idea-director.md).",
+      "description": "Mutually exclusive ways this pipeline can run (e.g. diffusers vs comfyui vs opencv backend). The agent picks one at preflight and logs it in the decision_log.",
       "items": {
         "type": "object",
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "properties": {
-          "name": { "type": "string" },
-          "description": { "type": "string" },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
           "required_tools": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Tools that must be available for this mode to be viable"
           },
           "optional_tools": {
             "type": "array",
-            "items": { "type": "string" }
-          },
-          "scene_type": {
-            "type": "string",
-            "description": "Remotion cut.type this mode composes, when it synthesizes rather than captures"
+            "items": {
+              "type": "string"
+            }
           },
           "agent_skills": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Layer 3 skills to read before producing in this mode"
           },
           "best_for": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
@@ -77,73 +89,120 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "properties": {
-          "name": { "type": "string" },
-          "agent": { "type": "string", "description": "Legacy: class name for Python-driven stages" },
-          "skill": { "type": "string", "description": "Skill path for instruction-driven stages (e.g., pipelines/explainer/idea-director)" },
+          "name": {
+            "type": "string"
+          },
+          "skill": {
+            "type": "string",
+            "description": "Skill path for instruction-driven stages (e.g., pipelines/explainer/idea-director)"
+          },
           "required_artifacts_in": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Artifact names that must exist before this stage runs"
           },
           "optional_artifacts_in": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
           "produces": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Artifact names this stage produces"
-          },
-          "preferred_tools": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Legacy: preferred tools for Python handlers"
           },
           "fallback_tools": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
           "required_tools": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Tools that must be available (or their fallback) for this stage to succeed"
           },
           "optional_tools": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Tools that enhance this stage but are not required"
           },
           "tools_available": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "All tools the agent can use in this stage (union of required + optional)"
           },
           "review_focus": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "What the reviewer checks after this stage"
           },
-          "checkpoint_required": { "type": "boolean", "default": true },
-          "human_approval_default": { "type": "boolean", "default": false },
+          "checkpoint_required": {
+            "type": "boolean",
+            "default": true
+          },
+          "human_approval_default": {
+            "type": "boolean",
+            "default": false
+          },
           "success_criteria": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
           "sub_stages": {
             "type": "array",
-            "description": "Optional sub-stages within a stage (e.g., sample preview for reference-driven productions)",
+            "description": "Optional sub-stages within a stage (e.g. per-page runs inside a book)",
             "items": {
               "type": "object",
-              "required": ["name"],
+              "required": [
+                "name"
+              ],
               "properties": {
-                "name": { "type": "string" },
-                "description": { "type": "string" },
-                "condition": { "type": "string", "description": "When this sub-stage activates (e.g., video_analysis_brief_exists)" },
-                "human_approval_default": { "type": "boolean", "default": true },
-                "tools_available": { "type": "array", "items": { "type": "string" } },
-                "review_focus": { "type": "array", "items": { "type": "string" } }
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "condition": {
+                  "type": "string",
+                  "description": "When this sub-stage activates (e.g., video_analysis_brief_exists)"
+                },
+                "human_approval_default": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "tools_available": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "review_focus": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
               }
             }
           }
@@ -154,29 +213,25 @@
     },
     "default_checkpoint_policy": {
       "type": "string",
-      "enum": ["guided", "manual_all", "auto_noncreative"],
+      "enum": [
+        "guided",
+        "manual_all",
+        "auto_noncreative"
+      ],
       "default": "guided"
     },
-    "reference_input": {
-      "type": "object",
-      "description": "Configuration for reference video input support",
-      "properties": {
-        "supported": { "type": "boolean", "default": false },
-        "analysis_depth": { "type": "string", "enum": ["transcript_only", "standard", "deep"], "default": "standard" },
-        "analysis_tools": { "type": "array", "items": { "type": "string" } }
-      }
+    "metadata": {
+      "type": "object"
     },
-    "metadata": { "type": "object" },
     "orchestration": {
       "type": "object",
-      "description": "Executive Producer orchestration config",
       "properties": {
-        "mode": { "type": "string" },
-        "skill": { "type": "string" },
-        "budget_default_usd": { "type": "number" },
-        "max_revisions_per_stage": { "type": "integer" },
-        "max_send_backs": { "type": "integer" },
-        "max_wall_time_minutes": { "type": "integer" }
+        "max_revisions_per_stage": {
+          "type": "integer"
+        },
+        "max_review_rounds": {
+          "type": "integer"
+        }
       },
       "additionalProperties": false
     },
@@ -184,12 +239,31 @@
       "type": "object",
       "description": "Capability extension permissions for this pipeline",
       "properties": {
-        "custom_scripts": { "type": "boolean", "default": true },
-        "custom_playbooks": { "type": "boolean", "default": true },
-        "custom_skills": { "type": "boolean", "default": true },
-        "custom_tools": { "type": "boolean", "default": false }
+        "custom_scripts": {
+          "type": "boolean",
+          "default": true
+        },
+        "custom_skills": {
+          "type": "boolean",
+          "default": true
+        },
+        "custom_tools": {
+          "type": "boolean",
+          "default": false
+        },
+        "custom_styles": {
+          "type": "boolean",
+          "default": true
+        }
       },
       "additionalProperties": false
+    },
+    "compatible_styles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Cartoon style presets (styles/*.yaml) this pipeline supports"
     }
   },
   "additionalProperties": false

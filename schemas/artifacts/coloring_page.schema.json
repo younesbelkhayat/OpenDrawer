@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "opendrawer/artifacts/coloring_page",
+  "title": "Coloring page",
+  "description": "Final deliverables: drawing to color, colored model, combined A4 page (PNG + SVG).",
+  "type": "object",
+  "required": [
+    "version",
+    "page_png",
+    "page_svg",
+    "coloring_png",
+    "coloring_svg",
+    "model_png",
+    "model_svg"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "paper": {
+      "type": "string"
+    },
+    "dpi": {
+      "type": "integer"
+    },
+    "page_size": {
+      "type": "object",
+      "required": [
+        "width",
+        "height"
+      ],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "page_png": {
+      "type": "string"
+    },
+    "page_svg": {
+      "type": "string"
+    },
+    "coloring_png": {
+      "type": "string"
+    },
+    "coloring_svg": {
+      "type": "string"
+    },
+    "model_png": {
+      "type": "string"
+    },
+    "model_svg": {
+      "type": "string"
+    },
+    "drawing_box": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "minItems": 4,
+      "maxItems": 4,
+      "description": "[x, y, width, height] in pixels"
+    },
+    "thumbnail_box": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "minItems": 4,
+      "maxItems": 4,
+      "description": "[x, y, width, height] in pixels"
+    },
+    "qa_status": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "warn",
+        "fail"
+      ]
+    }
+  },
+  "additionalProperties": true
+}

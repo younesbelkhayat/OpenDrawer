@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "opendrawer/artifacts/line_art",
+  "title": "Line art",
+  "description": "Raw line extraction from the selected cartoon (before region cleanup).",
+  "type": "object",
+  "required": [
+    "version",
+    "source_cartoon",
+    "line_mask_path",
+    "work_size",
+    "methods"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "source_cartoon": {
+      "type": "string"
+    },
+    "line_mask_path": {
+      "type": "string"
+    },
+    "flat_path": {
+      "type": "string"
+    },
+    "subject_mask_path": {
+      "type": "string"
+    },
+    "work_size": {
+      "type": "object",
+      "required": [
+        "width",
+        "height"
+      ],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "methods": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "dark_strokes",
+          "color_boundaries",
+          "neural_lineart",
+          "subject_outline"
+        ]
+      }
+    },
+    "difficulty": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

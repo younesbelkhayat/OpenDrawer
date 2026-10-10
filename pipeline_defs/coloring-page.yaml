@@ -1,0 +1,118 @@
+name: coloring-page
+version: "1.0"
+description: >
+  Une photo (personnes et/ou animaux) devient une page de coloriage pour enfant :
+  cartoon "livre jeunesse", dessin au trait à zones fermées, modèle coloré avec
+  les vraies couleurs de la photo, page A4 combinée (PNG + SVG).
+category: coloring
+stability: beta
+compatible_styles:
+  - livre-jeunesse
+required_skills:
+  - meta/reviewer
+  - meta/checkpoint-protocol
+
+production_modes:
+  - name: diffusers
+    description: Diffusion locale en Python (SDXL ou SD1.5 + ControlNet + IP-Adapter). Qualité maximale, recommandé.
+    required_tools: [diffusers_cartoonize]
+    agent_skills: [diffusers-low-vram, cartoon-prompting]
+    best_for: [qualité, ressemblance, fonctionnement sans serveur externe]
+  - name: comfyui
+    description: Même principe via un serveur ComfyUI local et un workflow API modifiable.
+    required_tools: [comfyui_cartoonize]
+    agent_skills: [comfyui, cartoon-prompting]
+    best_for: [utilisateurs de ComfyUI, workflows personnalisés]
+  - name: opencv
+    description: Cartoonisation algorithmique sans GPU ni modèle (aperçu rapide / secours).
+    required_tools: [opencv_cartoonize]
+    best_for: [aperçu instantané, machine sans GPU, tests]
+
+stages:
+  - name: intake
+    skill: pipelines/coloring-page/intake-director
+    produces: [photo_analysis]
+    required_tools: [subject_detect, bg_remove, palette_extract]
+    optional_tools: [face_restore, upscale]
+    tools_available: [subject_detect, bg_remove, palette_extract, face_restore, upscale]
+    review_focus:
+      - Tous les sujets (personnes, animaux) sont détectés, rien de plus
+      - Le détourage garde cheveux, oreilles, mains, queue ; le fond est blanc
+      - La palette reflète les vraies couleurs (peau, cheveux, vêtements, pelage)
+    checkpoint_required: true
+    human_approval_default: false
+    success_criteria:
+      - photo_analysis valide avec au moins un sujet
+      - cutout sur fond blanc écrit sur disque
+
+  - name: cartoon
+    skill: pipelines/coloring-page/cartoon-director
+    required_artifacts_in: [photo_analysis]
+    produces: [cartoon_set]
+    required_tools: [cartoonize]
+    fallback_tools: [opencv_cartoonize]
+    tools_available: [cartoonize, diffusers_cartoonize, comfyui_cartoonize, opencv_cartoonize]
+    review_focus:
+      - Ressemblance (coiffure, lunettes, traits distinctifs, vêtements)
+      - "Style livre jeunesse : contours nets, aplats, pas d'ombrage ni de texture"
+      - Couleurs proches de la photo
+      - Aucun membre en trop, mains et visages propres
+      - Fond blanc, aucun décor
+    checkpoint_required: true
+    human_approval_default: true
+    success_criteria:
+      - au moins un candidat sélectionné (selected_id)
+      - l'agent a regardé chaque candidat avant de présenter
+
+  - name: line_art
+    skill: pipelines/coloring-page/line-art-director
+    required_artifacts_in: [photo_analysis, cartoon_set]
+    produces: [line_art]
+    required_tools: [lineart_extract]
+    tools_available: [lineart_extract]
+    review_focus:
+      - Les contours principaux (silhouette, visage, cheveux, vêtements) sont présents
+      - Pas de bruit (textures, ombres) transformé en traits
+    checkpoint_required: true
+    human_approval_default: false
+
+  - name: regions
+    skill: pipelines/coloring-page/regions-director
+    required_artifacts_in: [line_art]
+    produces: [region_map]
+    required_tools: [region_segment]
+    tools_available: [region_segment, palette_extract, coloring_qa]
+    review_focus:
+      - Nombre de zones adapté à la difficulté
+      - Zones toutes fermées, aucune minuscule à colorier
+      - Petits détails sombres (pupilles, narines) pré-remplis en noir
+      - Couleurs du modèle fidèles à la photo
+    checkpoint_required: true
+    human_approval_default: false
+
+  - name: page
+    skill: pipelines/coloring-page/page-director
+    required_artifacts_in: [region_map]
+    produces: [coloring_page, qa_report]
+    required_tools: [vectorize_svg, page_layout, coloring_qa]
+    tools_available: [vectorize_svg, page_layout, coloring_qa]
+    review_focus:
+      - Page A4 lisible, traits épais et nets à l'impression
+      - Vignette colorée lisible et non superposée au dessin
+      - SVG valide, zones remplissables avec couleur attendue
+      - Rapport QA sans échec
+    checkpoint_required: true
+    human_approval_default: true
+    success_criteria:
+      - qa_report.status != fail
+      - PNG et SVG de la page, du coloriage et du modèle sur disque
+
+default_checkpoint_policy: guided
+orchestration:
+  max_revisions_per_stage: 3
+  max_review_rounds: 2
+extensions:
+  custom_scripts: false
+  custom_styles: true
+  custom_skills: true
+  custom_tools: false

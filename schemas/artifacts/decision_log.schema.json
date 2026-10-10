@@ -1,18 +1,35 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "openmontage/artifacts/decision_log",
+  "$id": "opendrawer/artifacts/decision_log",
   "title": "Decision Log",
   "description": "Audit trail of every meaningful choice made during production. Prevents hidden system behavior, enables reviewer inspection, and guards against context drift.",
   "type": "object",
-  "required": ["version", "project_id", "decisions"],
+  "required": [
+    "version",
+    "project_id",
+    "decisions"
+  ],
   "properties": {
-    "version": { "type": "string", "const": "1.0" },
-    "project_id": { "type": "string" },
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "project_id": {
+      "type": "string"
+    },
     "decisions": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["decision_id", "stage", "category", "subject", "options_considered", "selected", "reason"],
+        "required": [
+          "decision_id",
+          "stage",
+          "category",
+          "subject",
+          "options_considered",
+          "selected",
+          "reason"
+        ],
         "properties": {
           "decision_id": {
             "type": "string",
@@ -26,21 +43,17 @@
             "type": "string",
             "enum": [
               "pipeline_selection",
-              "provider_selection",
-              "renderer_family_selection",
-              "render_runtime_selection",
-              "composition_mode",
-              "playbook_selection",
+              "backend_selection",
+              "model_selection",
+              "identity_mode",
+              "style_selection",
+              "difficulty_selection",
+              "candidate_selection",
               "fallback_decision",
-              "budget_tradeoff",
-              "downgrade_approval",
-              "music_source",
-              "motion_commitment",
-              "concept_selection",
-              "voice_selection",
+              "parameter_tuning",
+              "licensing_mode",
               "capability_extension",
-              "playbook_override",
-              "visual_accuracy_check"
+              "color_source"
             ],
             "description": "What class of decision this is"
           },
@@ -52,18 +65,34 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["option_id", "label", "score", "reason"],
+              "required": [
+                "option_id",
+                "label",
+                "score",
+                "reason"
+              ],
               "properties": {
-                "option_id": { "type": "string" },
-                "label": { "type": "string", "description": "Human-readable name" },
+                "option_id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string",
+                  "description": "Human-readable name"
+                },
                 "score": {
                   "type": "number",
                   "minimum": 0,
                   "maximum": 1,
                   "description": "Normalized score 0-1 (1 is best)"
                 },
-                "reason": { "type": "string", "description": "Why this option scored this way" },
-                "rejected_because": { "type": "string", "description": "If rejected, why" }
+                "reason": {
+                  "type": "string",
+                  "description": "Why this option scored this way"
+                },
+                "rejected_because": {
+                  "type": "string",
+                  "description": "If rejected, why"
+                }
               },
               "additionalProperties": false
             },

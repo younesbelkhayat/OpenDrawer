@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "opendrawer/artifacts/region_map",
+  "title": "Region map",
+  "description": "Closed zones to color, their expected colors, and the clean final line art.",
+  "type": "object",
+  "required": [
+    "version",
+    "difficulty",
+    "work_size",
+    "labels_path",
+    "lines_path",
+    "coloring_png",
+    "model_png",
+    "regions"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "difficulty": {
+      "type": "string"
+    },
+    "work_size": {
+      "type": "object",
+      "required": [
+        "width",
+        "height"
+      ],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "labels_path": {
+      "type": "string"
+    },
+    "lines_path": {
+      "type": "string"
+    },
+    "coloring_png": {
+      "type": "string"
+    },
+    "model_png": {
+      "type": "string"
+    },
+    "color_source": {
+      "type": "string"
+    },
+    "region_count": {
+      "type": "integer"
+    },
+    "black_fill_count": {
+      "type": "integer"
+    },
+    "regions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "area_px",
+          "color_hex",
+          "black_fill"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "area_px": {
+            "type": "integer"
+          },
+          "color_hex": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "color_name": {
+            "type": "string"
+          },
+          "black_fill": {
+            "type": "boolean"
+          },
+          "centroid": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      }
+    },
+    "palette_used": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "hex"
+        ],
+        "properties": {
+          "hex": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "lab": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "weight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}
