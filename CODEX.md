@@ -1,4 +1,4 @@
-# OpenMontage - Codex Agent Instructions
+# OpenDrawer - instructions pour Codex
 
-> **Start here:** See [`AGENT_GUIDE.md`](AGENT_GUIDE.md) — the complete operating guide and agent contract.
-> **Project context:** See [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) for architecture, key files, and conventions.
+> **Commencez ici :** [`AGENT_GUIDE.md`](AGENT_GUIDE.md) — guide et contrat de l'agent.
+> **Contexte du projet :** [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md).

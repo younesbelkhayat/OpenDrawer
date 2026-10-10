@@ -1,1 +1,1 @@
-"""Enhancement tools for image and video quality improvement."""
+"""Foreground segmentation (subject masks, white-background cutouts)."""

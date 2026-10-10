@@ -4,6 +4,7 @@
     python -m opendrawer book dossier_photos/ [--yes]
     python -m opendrawer resume <projet> [--yes]
     python -m opendrawer doctor
+    python -m opendrawer demo
     python -m opendrawer models list | download sdxl
 """
 
@@ -205,6 +206,16 @@ def cmd_models(args: argparse.Namespace) -> int:
     return status
 
 
+def cmd_demo(args: argparse.Namespace) -> int:
+    from opendrawer.demo import make_demo_photo
+
+    photo = make_demo_photo(PROJECTS_DIR / "_demo" / "demo_photo.jpg")
+    settings = RunSettings(difficulty=get_preset(args.difficulty).name, backend="opencv", candidates=2, seed=0)
+    run = PageRun.create(photo, settings, AutoApprover(), title="Démo OpenDrawer")
+    print(f"Projet de démonstration : {run.project_dir}")
+    return _report(run.run(), run.project_dir)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="opendrawer", description="Photo → page de coloriage pour enfant (100 % local)")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -226,6 +237,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     d = sub.add_parser("doctor", help="Matériel, outils et modèles disponibles")
     d.set_defaults(func=cmd_doctor)
+
+    demo = sub.add_parser("demo", help="Page de démonstration sans GPU ni modèle (backend OpenCV)")
+    demo.add_argument("--difficulty", default="medium")
+    demo.set_defaults(func=cmd_demo)
 
     m = sub.add_parser("models", help="Lister / télécharger les modèles locaux")
     m.add_argument("action", choices=["list", "download"])

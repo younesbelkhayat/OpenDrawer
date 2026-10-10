@@ -185,7 +185,7 @@
                 },
                 "condition": {
                   "type": "string",
-                  "description": "When this sub-stage activates (e.g., video_analysis_brief_exists)"
+                  "description": "When this sub-stage activates (e.g., a context flag)"
                 },
                 "human_approval_default": {
                   "type": "boolean",

@@ -24,7 +24,7 @@ class ComfyUIError(Exception):
     ``prompt_id`` is set when the error follows a successful ``submit()``,
     so callers can recover a timed-out-but-still-running job instead of
     losing track of it: poll ``GET /history/{prompt_id}`` directly, or
-    pass ``resume_prompt_id`` back into ``ComfyUIVideo.execute()``.
+    pass ``resume_prompt_id`` back into :meth:`ComfyUIClient.generate`.
     """
 
     def __init__(self, message: str, prompt_id: str | None = None) -> None:

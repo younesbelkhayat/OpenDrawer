@@ -36,8 +36,6 @@ _PATH_HINT_KEYS = (
     "output_dir",
     "output_file",
     "input_path",
-    "video_path",
-    "audio_path",
     "image_path",
     "file_path",
 )
@@ -53,7 +51,7 @@ def infer_project_dir(inputs: Any) -> Optional[Path]:
         return None
     try:
         # Only paths under the canonical projects root are attributable —
-        # an explicit project_dir pointing elsewhere (HyperFrames workspace,
+        # an explicit project_dir pointing elsewhere (ComfyUI temp folder,
         # arbitrary user dir) must not receive an events.jsonl. Explicit
         # values are normalized to the project ROOT the same way hints are,
         # so project_dir="projects/x/renders/build" attributes to projects/x.

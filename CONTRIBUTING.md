@@ -1,7 +1,13 @@
-# Contributing to OpenMontage
+# Contribuer à OpenDrawer
 
-Thank you for improving OpenMontage. We do not require a Contributor License Agreement (CLA), Developer Certificate of Origin sign-off, or any separate contribution contract.
+Aucun accord de contributeur n'est demandé. En proposant une pull request,
+vous confirmez avoir le droit d'en céder le contenu, compatible avec la
+[licence AGPLv3](LICENSE).
 
-By submitting a pull request, you confirm that you have the right to contribute its contents. Contributions must be compatible with the repository's [AGPLv3 license](LICENSE), and accepted contributions remain available under that license.
-
-Please keep pull requests focused and include tests when behavior changes.
+- Une pull request = une modification cohérente.
+- `make test` doit passer (aucun test n'accède au réseau ni au GPU).
+- Nouveaux outils : suivre `PROJECT_CONTEXT.md` (« Conventions pour un nouvel outil »).
+- Nouveaux styles / skills : `skills/meta/skill-creator.md`.
+- Code en anglais, documentation et skills en français.
+- Nouveau modèle : l'ajouter à `models.yaml` avec sa licence exacte ;
+  `commercial_safe: true` seulement si la licence a été vérifiée.

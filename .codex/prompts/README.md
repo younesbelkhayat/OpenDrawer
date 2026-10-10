@@ -1,12 +1,10 @@
-# Codex custom prompts
+# Prompts personnalisés Codex
 
-Codex only scans **`~/.codex/prompts/`** (user home) for custom prompts — it does **not** read project-level `.codex/prompts/`. These files are versioned here as the source of truth; to use them in Codex, copy or symlink them into your home dir:
+Codex ne lit que **`~/.codex/prompts/`** (dossier personnel), pas le
+`.codex/prompts/` du projet. Ces fichiers font référence ; pour les utiliser :
 
 ```bash
 mkdir -p ~/.codex/prompts
-cp .codex/prompts/ink-art.md .codex/prompts/animated-drawing.md ~/.codex/prompts/
-# or symlink so repo edits propagate:
-# ln -s "$PWD/.codex/prompts/ink-art.md" ~/.codex/prompts/ink-art.md
+ln -s "$PWD/.codex/prompts/backlot.md" ~/.codex/prompts/backlot.md
+ln -s "$PWD/.codex/prompts/coloriage.md" ~/.codex/prompts/coloriage.md
 ```
-
-Then restart Codex; `/ink-art` and `/animated-drawing` appear in the `/` menu. (OpenAI is deprecating custom prompts in favor of Codex "skills" — migrate when that stabilizes.)

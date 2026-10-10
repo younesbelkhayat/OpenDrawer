@@ -53,7 +53,8 @@
               "parameter_tuning",
               "licensing_mode",
               "capability_extension",
-              "color_source"
+              "color_source",
+              "approval_policy"
             ],
             "description": "What class of decision this is"
           },

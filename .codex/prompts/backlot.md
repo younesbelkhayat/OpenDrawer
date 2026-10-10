@@ -1,12 +1,15 @@
-# /backlot — open the living storyboard
+---
+description: Ouvrir le tableau Backlot — étapes, cartoons, zones, page finale et contrôle qualité en direct.
+argument-hint: [id du projet (optionnel)]
+---
 
-Open the Backlot board (browser UI showing pipeline stages, script, scene plan, and generated assets live) for the requested project:
+Ouvrir le tableau Backlot du projet demandé :
 
 ```bash
-python -m backlot open <project-id>
+python -m backlot open $ARGUMENTS
 ```
 
-- No project id → open the library view: `python -m backlot open`
-- Idempotent: starts the Backlot server if needed, then opens the browser at the project's board.
-- If it fails, report and continue — the board is an observer, never a blocker.
-- The board derives all state from `projects/<id>/` on disk; never update the UI manually. Keep checkpoints and artifacts honest per `skills/meta/checkpoint-protocol.md`.
+- Sans argument : vue de tous les projets.
+- Idempotent : démarre le serveur si besoin puis ouvre le navigateur.
+- En cas d'échec, le signaler et continuer : le tableau observe, il ne bloque jamais.
+- Le tableau lit `projects/<id>/` sur le disque ; tenir checkpoints et artefacts à jour selon `skills/meta/checkpoint-protocol.md`.

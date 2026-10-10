@@ -1,16 +1,17 @@
-# OpenMontage - Core Dependencies
+# OpenDrawer - dépendances de base (CPU, sans modèle)
 pyyaml>=6.0
 pydantic>=2.0
 jsonschema>=4.20
 python-dotenv>=1.0
 Pillow>=10.0
 numpy>=1.24
+scipy>=1.10
+scikit-image>=0.22
+opencv-python-headless>=4.9,<5   # OpenCV 5 retire la cascade de Haar du module principal
 requests>=2.31
-google-auth>=2.0       # service-account auth for Google TTS + Imagen (Vertex AI)
-google-genai>=1.0.0    # Gemini Developer API clients for Lyria, Veo, and Gemini Omni
-openai>=2.44.0         # Videos API support for Sora 2
+huggingface_hub>=0.24            # téléchargement explicite des poids (python -m opendrawer models download)
 
-# Backlot - the living storyboard (local board server)
+# Backlot - le tableau local
 fastapi>=0.110
 uvicorn>=0.29
 watchfiles>=0.21

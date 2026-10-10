@@ -1,5 +1,5 @@
 <!--
-Thanks for contributing to OpenMontage! Please fill in the sections below.
+Thanks for contributing to OpenDrawer! Please fill in the sections below.
 Keep PRs focused — one logical change per PR is easier to review and merge.
 -->
 
@@ -25,6 +25,6 @@ Closes #
 ## Checklist
 
 - [ ] The change is focused on a single logical concern.
-- [ ] I ran the relevant tests locally (`make test-contracts` / `make test`) where applicable.
+- [ ] I ran the relevant tests locally (`make test`) where applicable.
 - [ ] I updated docs/README if behavior or usage changed.
 - [ ] No unrelated files (build artifacts, local config) are included in the diff.

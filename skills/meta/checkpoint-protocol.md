@@ -1,246 +1,102 @@
-# Checkpoint Protocol — Meta Skill
+# Protocole de checkpoint — meta-skill
 
-## When to Use
+## Quand l'utiliser
 
-After completing a stage's work AND passing review. This skill teaches you when and how to checkpoint, and when to ask the human for approval. It replaces the Python `checkpoint_policy.py` with an instruction-driven protocol.
+À la fin de chaque étape (après la relecture), et au début de chaque étape
+pour signaler qu'elle est en cours. Les checkpoints sont les points de
+sauvegarde : reprise après erreur, validation humaine, historique.
 
-Checkpoints are the save points of a pipeline. They enable resume-from-failure, human oversight, and audit trails.
+Le CLI (`python -m opendrawer ...`) écrit exactement les mêmes checkpoints :
+un projet lancé par le CLI peut être repris par l'agent et inversement.
 
-## Protocol
-
-### Step 1: Check Manifest Policy
-
-Read the current stage's configuration from the pipeline manifest:
+## 1. Lire la politique du manifeste
 
 ```yaml
-- name: idea
-  checkpoint_required: true      # Must we checkpoint?
-  human_approval_default: true   # Must we ask the human?
+- name: cartoon
+  checkpoint_required: true
+  human_approval_default: true   # gate humaine
+  produces: [cartoon_set]        # artefacts obligatoires
 ```
 
-| `checkpoint_required` | `human_approval_default` | Action |
-|----------------------|------------------------|--------|
-| true | true | Checkpoint + present to human for approval |
-| true | false | Checkpoint + proceed automatically |
-| false | * | Skip checkpoint entirely (rare) |
+| `human_approval_default` | Action |
+|---|---|
+| `true` | checkpoint `awaiting_human` → présenter → **finir le tour** → `completed` après accord |
+| `false` | checkpoint `completed` puis étape suivante |
 
-### Step 2: Prepare Checkpoint Data
+Le manifeste fait foi. `lib/checkpoint.py` refuse d'écrire `completed` sur une
+étape à gate sans `human_approved=True` (GATE VIOLATION), refuse une étape
+dont les prédécesseurs ne sont pas terminés (PREREQUISITE VIOLATION), et
+refuse un checkpoint `completed`/`awaiting_human` auquel il manque un
+artefact listé dans `produces`.
 
-Gather everything needed for the checkpoint:
-
-1. **Stage name** — which stage just completed
-2. **Status** — `"completed"` (or `"awaiting_human"` if approval needed)
-3. **Artifacts** — the canonical artifact(s) produced by this stage
-4. **Metadata** — review findings, cost snapshot, timing info
-
-### Step 3: Write Checkpoint
-
-Call the checkpoint utility:
-
-```python
-write_checkpoint(
-    pipeline_dir,      # Project working directory
-    project_name,      # Project identifier
-    stage_name,        # e.g., "idea"
-    status,            # "completed" or "awaiting_human"
-    artifacts,         # {"brief": {...}} — the stage's output
-)
-```
-
-The checkpoint utility will:
-- Validate the artifact against its schema
-- Enforce the approval gate (a gated stage cannot be written `completed` without `human_approved=True`)
-- Archive any superseded checkpoint to `projects/<id>/history/` (stage versions and gate transitions are never destroyed)
-- Write the checkpoint JSON to disk
-- Include timestamp and stage metadata
-
-Canonical location: `projects/<project_id>/checkpoint_<stage>.json` — always
-pass the repo's `projects/` directory as `pipeline_dir` (or use
-`lib.checkpoint.PROJECTS_DIR`). Always pass `pipeline_type` — gate enforcement
-reads the manifest through it.
-
-At pipeline initialization (before any stage), call `init_project()`:
+## 2. Initialiser le projet (une fois)
 
 ```python
 from lib.checkpoint import init_project
-init_project("my-project", title="My Project", pipeline_type="cinematic")
+init_project("lea-plage", title="Léa à la plage", pipeline_type="coloring-page",
+             style="livre-jeunesse",
+             extra={"settings": {"difficulty": "medium", "commercial_safe": False}})
 ```
 
-This creates the canonical directory layout and writes `project.json` — the
-marker the Backlot board needs to show the project before its first
-checkpoint. Then launch the board: `python -m backlot open my-project`
-(non-fatal if unavailable — the board is an observer, never a blocker).
+Copiez ensuite la photo dans `projects/<id>/input/` et lancez le tableau :
+`python -m backlot open <id>` (non bloquant s'il échoue).
 
-### Step 4: Intra-Stage Checkpointing (Resume Support + Liveness)
+Arborescence d'un projet :
 
-**On entering any stage, write an `in_progress` checkpoint first.** This is
-what tells the user (via the Backlot board) that the stage is live rather
-than stalled — certainty matters more than speed.
+```
+projects/<id>/
+  project.json            marqueur (pipeline, style, réglages)
+  input/photo.jpg
+  assets/intake/          masque, détourage, masques par sujet
+  assets/cartoon/         candidate_1.png …
+  assets/line_art/        traits bruts, aplats, masque du sujet
+  assets/regions/         labels.png, lines.png, coloring_work.png, model_work.png
+  output/                 page.png/svg, coloriage.png/svg, modele.png/svg
+  artifacts/*.json        un fichier par artefact
+  checkpoint_<étape>.json + history/
+  events.jsonl            écrit automatiquement par les outils
+```
 
-Long-running stages (like `assets` or `compose` loops) can fail midway due to API errors, rate limits, or session interruptions. To allow resuming from the exact point of failure (e.g., Scene 4):
-
-1. **Write partial progress**: Every time you successfully generate a significant item (e.g., one scene's assets, one clip), write an `in_progress` checkpoint.
-
-   `in_progress` checkpoints may omit the stage's canonical artifact, but any artifact stored under a known artifact name is still schema-validated. If the partial data is not yet a valid canonical artifact, store it under `metadata.partial_progress` instead of `artifacts`.
-   ```python
-   write_checkpoint(
-       pipeline_dir, project_name,
-       stage="assets",
-       status="in_progress",
-       artifacts={},  # no incomplete canonical artifact yet
-       metadata={
-           "partial_progress": {
-               "asset_manifest_draft": partial_manifest_dict,
-               "completed_scene_ids": completed_scene_ids,
-           }
-       },
-   )
-   ```
-   If the partial artifact already satisfies its schema (for example, an `asset_manifest` with `version: "1.0"` and valid `assets[]` entries), it may be stored in `artifacts` directly.
-2. **Resume from partial progress**: When starting a stage, ALWAYS check if an `in_progress` checkpoint exists for it. See Step 7 (Resume Protocol) for how to handle it.
-
-### Step 5: Human Approval (If Required)
-
-**The manifest value is binding.** `human_approval_default` in the pipeline
-manifest is the single source of truth for whether a stage gates. This skill
-never overrides it, and neither do you — there is no "this case is different."
-(`lib/checkpoint.py` enforces this: writing `status="completed"` for a gated
-stage without `human_approved=True` raises a `GATE VIOLATION` error.)
-
-When `human_approval_default: true`:
-
-1. **Write the checkpoint with `status="awaiting_human"`** (not `completed`).
-
-2. **Present a summary** to the human:
-   ```
-   ## Stage Complete: [stage_name] — awaiting your approval
-
-   ### Artifact Summary
-   [Key details from the artifact — title, duration, key decisions]
-   [If the Backlot board is running, point to it: the artifact renders there]
-
-   ### Review Findings
-   [Summary from reviewer: N critical (all fixed), N suggestions]
-
-   ### Cost So Far
-   [Budget spent / total, breakdown by tool]
-
-   ### Action Required
-   Please review and approve to continue, or provide feedback for revision.
-   ```
-
-3. **END YOUR TURN.** Performing any further pipeline work in the same
-   response is a gate violation. "Present and continue" is not waiting —
-   the turn must end with the question, and the next pipeline action must
-   be caused by the user's reply.
-
-4. **On the user's response:**
-   - **Approved** → re-write the checkpoint with `status="completed"`,
-     `human_approved=True`, then proceed to the next stage
-   - **Revision requested** → go back to the stage director skill with the
-     human's feedback, produce revised artifacts, re-review, re-checkpoint
-     (the superseded checkpoint is preserved automatically in `history/`)
-   - **Abort** → stop the pipeline
-
-5. **Approval is per-gate.** A prior approval, however broad ("looks great,
-   go ahead and make the whole thing"), never covers a later gate. If the
-   user explicitly pre-authorizes the full run, record that as a
-   `decision_log` entry (`category: "approval_policy"`) at the moment they
-   say it — absent that entry, stop at every gate.
-
-6. **The assets gate reviews the storyboard — before any draft render.**
-   `assets` now gates in every pipeline: present the generated assets
-   scene-by-scene (the Backlot board's filmstrip is the natural review
-   surface), including spend so far and the projected compose cost. A bad
-   asset caught here saves a full re-render.
-
-   **Do not render a draft/full composition to earn this review.** The review
-   surface is the filmstrip populated with per-scene assets — stock picks,
-   generated stills, narration waveforms — *not* a rendered video. For scenes
-   whose "asset" is a bespoke/atelier composition (no thumbnailable file), the
-   agent writes one **per-scene review still** to
-   `projects/<id>/snapshots/<scene_id>.png` (a `remotion still` at a
-   representative frame — see `skills/meta/bespoke-composition.md`); the board
-   shows those on the filmstrip. Refresh `metadata.partial_progress` as stills
-   land, then STOP at the gate. The draft/final render is the **compose**
-   stage — it runs only after the assets gate is approved. Rendering a full
-   draft inside the assets stage jumps the gate the user is meant to hold.
-
-### Step 6: Determine Next Stage
-
-After checkpoint is written and approved (if needed):
+## 3. Écrire les checkpoints
 
 ```python
-next_stage = get_next_stage(pipeline_dir, project_name)
+from lib.checkpoint import PROJECTS_DIR, write_checkpoint
+write_checkpoint(PROJECTS_DIR, "lea-plage", "intake", "in_progress", {}, pipeline_type="coloring-page")
+# … travail …
+write_checkpoint(PROJECTS_DIR, "lea-plage", "intake", "completed",
+                 {"photo_analysis": photo_analysis}, pipeline_type="coloring-page")
 ```
 
-This reads all existing checkpoints and returns the next stage that needs to run, or `None` if the pipeline is complete.
+Enregistrez aussi chaque artefact dans `artifacts/<nom>.json` (le tableau et
+les étapes suivantes les lisent). Un checkpoint remplacé est archivé dans
+`history/` automatiquement.
 
-### Step 7: Resume Protocol
+## 4. Validation humaine
 
-At the START of any pipeline run (not just after a stage), always check for existing progress:
+1. Écrire le checkpoint avec `status="awaiting_human"` et les artefacts.
+2. Présenter un résumé court : chemins des images à regarder (ou le tableau
+   Backlot), votre propre avis issu de la relecture, les choix possibles.
+3. **Finir le tour.** Continuer dans la même réponse est une violation.
+4. Réponse de l'utilisateur :
+   - accord → réécrire `completed` avec `human_approved=True` (et, pour le
+     cartoon, `selected_id` = candidat choisi) ;
+   - changement demandé → refaire l'étape avec ses retours ;
+   - abandon → s'arrêter.
+5. Une validation vaut pour une seule gate. Si l'utilisateur autorise
+   explicitement tout le parcours (« fais tout sans me demander »),
+   consignez-le dans le `decision_log` (`category: "approval_policy"`).
 
-```python
-next_stage = get_next_stage(pipeline_dir, project_name)
-```
+## 5. Échecs et reprise
 
-If `next_stage` is not the first stage:
-1. Inform the human: "Found existing progress. Resuming from stage: [next_stage]"
-2. **Check for partial progress**: Read the checkpoint for `next_stage`:
-   ```python
-   current_cp = read_checkpoint(pipeline_dir, project_name, next_stage)
-   ```
-   If `current_cp` exists and its status is `"in_progress"`, inform the human you are resuming from the middle of the stage.
-3. **Load artifacts**: Load prior artifacts from checkpoints for context. If resuming from `"in_progress"`, first load any schema-valid partial artifact from `current_cp["artifacts"]`. If the partial data is stored in `current_cp["metadata"]["partial_progress"]`, use that draft data and its completion markers (such as `completed_scene_ids`) to skip sub-tasks that are already done.
-4. **Continue**: Continue generation from the next successful step, appending to the partial artifact.
+- Outil en échec → checkpoint `failed` avec `error`, puis appliquer la règle
+  « Escalader les blocages » d'`AGENT_GUIDE.md` (aucune substitution sans accord).
+- Reprise : `get_next_stage(PROJECTS_DIR, id)` donne l'étape suivante ; une
+  étape `awaiting_human` se reprend en re-présentant ses artefacts.
 
-If a checkpoint exists with status `"awaiting_human"`:
-1. Inform the human: "Stage [name] is awaiting your approval"
-2. Present the checkpoint data for review
-3. Wait for approval before proceeding
+## 6. decision_log
 
-### Sample Checkpoint (Reference-Driven Productions)
-
-When a production is reference-driven (VideoAnalysisBrief exists), there is an
-additional checkpoint between proposal approval and full production:
-
-| Stage | checkpoint_required | human_approval_default | Notes |
-|-------|--------------------|-----------------------|-------|
-| `sample` | true | true | Always requires human approval |
-
-The sample checkpoint:
-1. Presents: rendered sample clip (10-15 seconds)
-2. Cost: sample cost vs. projected full-video cost
-3. Action: approve (→ proceed to script), revise (→ re-generate sample), abort
-
-The sample checkpoint is NOT a pipeline stage — it's a sub-checkpoint within the
-proposal stage. It does not produce a canonical artifact. It produces a rendered
-preview clip stored at `projects/<name>/assets/sample/sample_v{N}.mp4`.
-
-**Presentation format:**
-```
-## Sample Preview Ready
-
-**Sample clip:** [path to sample_v1.mp4]
-- Duration: [X] seconds (hook + 1 middle scene)
-- Voice: [TTS provider + voice name]
-- Visuals: [description — AI images, Remotion animations, etc.]
-- Music: [source]
-
-**Sample cost:** $[X.XX]
-**Projected full video cost:** $[X.XX]
-
-Does this feel right? I can adjust: voice, visual style, pacing, music, colors.
-```
-
-## Key Principles
-
-1. **Always checkpoint completed work.** Even if `checkpoint_required: false`, consider checkpointing anyway if the stage took significant time or cost. Losing work is worse than an extra file on disk.
-
-2. **Never skip human approval on creative stages.** `idea` and `script` shape everything. Rushing past them to save time produces videos nobody wants.
-
-3. **Include cost snapshots.** The human should know how much has been spent and how much remains before approving expensive downstream stages (assets, compose).
-
-4. **Checkpoints enable resume.** If the pipeline crashes at `compose`, the human can restart and it picks up from `compose` — not from `idea`. This is the whole point.
-
-5. **Be transparent in approval requests.** Don't just show the artifact — show the review findings, the cost, and any concerns. Help the human make an informed decision.
+Chaque choix significatif (backend, famille de modèle, mode de ressemblance,
+difficulté, candidat retenu, relance avec d'autres paramètres) va dans
+`artifacts["decision_log"]` d'un checkpoint ; il est fusionné dans
+`projects/<id>/decision_log.json`. Un choix modifié en cours de route = une
+nouvelle entrée avec la même paire (`category`, `subject`).

@@ -1,17 +1,16 @@
 """Session-wide test safety net.
 
-**No test may open a network connection.** Provider tools bill per call, so a
-test that reaches a real endpoint costs the developer money — silently, and
-every time CI runs. This blocks outbound sockets for the whole test session.
+**No test may open a network connection.** OpenDrawer promises that a run is
+fully offline once the weights are on disk (children's photos never leave the
+machine), and tests must never trigger a multi-gigabyte model download. This
+blocks outbound sockets for the whole test session.
 
-The guard is at the socket layer on purpose. Patching `requests` only covers
-tools that use `requests`; the fleet also talks to vendor SDKs (google-cloud,
-openai, boto3), `httpx`, and raw `urllib`. Everything bottoms out in
-`socket.connect`, so that is where the wall goes.
+The guard is at the socket layer on purpose: `requests`, `huggingface_hub`,
+`httpx` and raw `urllib` all bottom out in `socket.connect`.
 
-Loopback is still allowed — local servers, ffmpeg RPC, and Backlot fixtures need it.
+Loopback is still allowed — the ComfyUI client and Backlot fixtures need it.
 
-To write a test that genuinely hits a live API:
+To write a test that genuinely needs the network (e.g. a real download):
 
     @pytest.mark.live_api
     def test_real_call():
@@ -19,11 +18,10 @@ To write a test that genuinely hits a live API:
 
 Marked tests are **skipped by default** and only run with the env flag set:
 
-    OPENMONTAGE_ALLOW_NETWORK=1 pytest -m live_api
+    OPENDRAWER_ALLOW_NETWORK=1 pytest -m live_api
 
 Limitation: this guards the pytest process. A test that shells out to a
-subprocess (node, ffmpeg, npx) is outside its reach — don't call paid APIs
-from a subprocess in tests.
+subprocess is outside its reach — don't download from a subprocess in tests.
 """
 
 from __future__ import annotations
@@ -33,7 +31,7 @@ import socket
 
 import pytest
 
-_ALLOW_ENV_FLAG = "OPENMONTAGE_ALLOW_NETWORK"
+_ALLOW_ENV_FLAG = "OPENDRAWER_ALLOW_NETWORK"
 
 _LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0", ""}
 
@@ -71,9 +69,8 @@ def _blocked(address) -> NetworkCallInTestError:
     return NetworkCallInTestError(
         f"Blocked a network connection to {address!r} during a test.\n"
         f"\n"
-        f"Tests must not call real endpoints — provider APIs bill per request.\n"
-        f"Mock the transport instead (see tests/tools/test_atlas_video.py for the\n"
-        f"fake-`requests` pattern), or mark the test @pytest.mark.live_api and run\n"
+        f"Tests must stay offline (no model downloads, no photo uploads).\n"
+        f"Mock the transport instead, or mark the test @pytest.mark.live_api and run\n"
         f"it deliberately with {_ALLOW_ENV_FLAG}=1."
     )
 
@@ -114,7 +111,7 @@ def _block_network():
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
-        "live_api: test performs a real, billable API call. Skipped unless "
+        "live_api: test needs the network (e.g. a real model download). Skipped unless "
         f"{_ALLOW_ENV_FLAG}=1 is set.",
     )
 
@@ -124,8 +121,37 @@ def pytest_collection_modifyitems(config, items):
     if _network_allowed():
         return
     skip = pytest.mark.skip(
-        reason=f"live API test — costs money; set {_ALLOW_ENV_FLAG}=1 to run"
+        reason=f"network test; set {_ALLOW_ENV_FLAG}=1 to run"
     )
     for item in items:
         if "live_api" in item.keywords:
             item.add_marker(skip)
+
+
+# ---------------------------------------------------------------------------
+# Shared fixtures: a synthetic photo and one end-to-end run (OpenCV backend,
+# no GPU, no weights) reused by the pipeline, QA and Backlot tests.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def demo_photo(tmp_path_factory):
+    from opendrawer.demo import make_demo_photo
+
+    return make_demo_photo(tmp_path_factory.mktemp("photos") / "lea.jpg")
+
+
+@pytest.fixture(scope="session")
+def projects_dir(tmp_path_factory):
+    return tmp_path_factory.mktemp("projects")
+
+
+@pytest.fixture(scope="session")
+def e2e_page(demo_photo, projects_dir):
+    """A completed coloring-page project: (projects_dir, project_id)."""
+    from opendrawer.runner import AutoApprover, PageRun, RunSettings
+
+    settings = RunSettings(difficulty="medium", backend="opencv", candidates=2, seed=1)
+    run = PageRun.create(demo_photo, settings, AutoApprover(), project_id="e2e", projects_dir=projects_dir, log=lambda _: None)
+    assert run.run() == "completed"
+    return projects_dir, "e2e"

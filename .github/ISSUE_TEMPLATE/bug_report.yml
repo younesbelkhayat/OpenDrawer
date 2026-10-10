@@ -1,12 +1,12 @@
 name: Bug report
-description: Report a reproducible problem with OpenMontage
+description: Report a reproducible problem with OpenDrawer
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
         Thanks for taking the time to file a bug. Please fill in the fields below so it can be reproduced and triaged quickly.
-        For questions or help, use [GitHub Discussions](https://github.com/calesthio/OpenMontage/discussions) instead.
+        For questions or help, use [GitHub Discussions](https://github.com/calesthio/OpenDrawer/discussions) instead.
   - type: textarea
     id: summary
     attributes:
@@ -26,14 +26,14 @@ body:
     attributes:
       label: Pipeline
       description: Which pipeline were you running, if any?
-      placeholder: e.g. cinematic, explainer, character-animation
+      placeholder: e.g. coloring-page, coloring-book
     validations:
       required: false
   - type: input
     id: runtime
     attributes:
-      label: Runtime / renderer
-      placeholder: e.g. remotion, hyperframes
+      label: Backend / GPU
+      placeholder: e.g. diffusers sdxl, RTX 2060 6 GB
     validations:
       required: false
   - type: textarea

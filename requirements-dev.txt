@@ -1,5 +1,4 @@
-# OpenMontage - Development Dependencies
+# OpenDrawer - dépendances de développement
 -r requirements.txt
 pytest>=8.0
-pytest-asyncio>=0.23
 httpx>=0.24
