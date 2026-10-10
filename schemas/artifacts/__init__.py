@@ -11,26 +11,8 @@ import jsonschema
 SCHEMA_DIR = Path(__file__).parent
 
 ARTIFACT_NAMES = [
-    "research_brief",
-    "proposal_packet",
-    "brief",
-    "script",
-    "character_design",
-    "rig_plan",
-    "pose_library",
-    "scene_plan",
-    "action_timeline",
-    "asset_manifest",
-    "edit_decisions",
-    "render_report",
-    "publish_log",
     "review",
-    "cost_log",
     "decision_log",
-    "source_media_review",
-    "final_review",
-    "character_qa_report",
-    "video_analysis_brief",
 ]
 
 
