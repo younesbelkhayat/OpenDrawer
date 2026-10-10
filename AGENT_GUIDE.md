@@ -100,6 +100,7 @@ décisions). Il observe seulement le disque ; s'il échoue, continuez.
 | Sujet | Fichier |
 |---|---|
 | Architecture, conventions | `PROJECT_CONTEXT.md`, `docs/ARCHITECTURE.md` |
+| Premier essai GPU, autodiagnostic | `docs/PREMIER_ESSAI.md`, `python -m opendrawer selftest` |
 | Index des skills | `skills/INDEX.md` |
 | Registre des outils | `tools/tool_registry.py` |
 | Manifestes | `pipeline_defs/*.yaml` |

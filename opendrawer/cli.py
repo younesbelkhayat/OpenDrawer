@@ -82,6 +82,7 @@ def _settings_from_args(args: argparse.Namespace, cfg: OpenDrawerConfig) -> RunS
         identity=args.identity or cfg.generation.identity,
         candidates=args.candidates or cfg.generation.candidates,
         seed=args.seed if args.seed is not None else cfg.generation.seed,
+        steps=args.steps,
         color_source=args.color_source or cfg.coloring.color_source,
         commercial_safe=bool(args.commercial_safe or cfg.licensing.commercial_safe),
         paper=cfg.page.paper,
@@ -102,6 +103,7 @@ def _add_run_options(p: argparse.ArgumentParser) -> None:
     p.add_argument("--identity", choices=["auto", "faceid", "plus_face", "none"])
     p.add_argument("--candidates", type=int, help="Nombre de propositions de cartoon")
     p.add_argument("--seed", type=int)
+    p.add_argument("--steps", type=int, help="Étapes de diffusion (défaut : celles du style)")
     p.add_argument("--color-source", choices=["photo", "cartoon"])
     p.add_argument("--neural-lineart", choices=["auto", "on", "off"], default="auto")
     p.add_argument("--describe", action="append", metavar="s1=TEXTE",
@@ -216,6 +218,19 @@ def cmd_demo(args: argparse.Namespace) -> int:
     return _report(run.run(), run.project_dir)
 
 
+def cmd_selftest(args: argparse.Namespace) -> int:
+    from opendrawer.selftest import run_selftest
+
+    print("Autodiagnostic en cours (la génération peut prendre plusieurs minutes)…", flush=True)
+    report = run_selftest(family=args.family, generate=not args.no_generate, steps=args.steps)
+    for c in report["checks"]:
+        mark = "✔" if c["status"] == "ok" else "✗"
+        detail = c["detail"].get("error") if isinstance(c["detail"], dict) and "error" in c["detail"] else ""
+        print(f" {mark} {c['check']:<45} {c['seconds']:>7.1f}s  {detail}")
+    print(f"\nRapport : {report['report_path']}")
+    return 0 if report["ok"] else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="opendrawer", description="Photo → page de coloriage pour enfant (100 % local)")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -241,6 +256,12 @@ def build_parser() -> argparse.ArgumentParser:
     demo = sub.add_parser("demo", help="Page de démonstration sans GPU ni modèle (backend OpenCV)")
     demo.add_argument("--difficulty", default="medium")
     demo.set_defaults(func=cmd_demo)
+
+    st = sub.add_parser("selftest", help="Vérifier GPU, modèles et une vraie génération (rapport JSON)")
+    st.add_argument("--family", choices=["auto", "sdxl", "sd15"], default="auto")
+    st.add_argument("--steps", type=int, default=12)
+    st.add_argument("--no-generate", action="store_true", help="Sans génération (vérifications rapides seulement)")
+    st.set_defaults(func=cmd_selftest)
 
     m = sub.add_parser("models", help="Lister / télécharger les modèles locaux")
     m.add_argument("action", choices=["list", "download"])

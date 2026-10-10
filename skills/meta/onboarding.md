@@ -12,7 +12,8 @@ passez directement à la pipeline.
 python -m opendrawer doctor
 ```
 
-ou en Python : `registry.provider_menu_summary()` (GPU, VRAM, outils
+puis, si un GPU est présent, `python -m opendrawer selftest --family sd15`
+(rapport dans `projects/_selftest_report.json`), ou en Python : `registry.provider_menu_summary()` (GPU, VRAM, outils
 disponibles, modèles manquants).
 
 ## 2. Classer la configuration

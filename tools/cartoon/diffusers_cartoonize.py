@@ -183,8 +183,22 @@ class DiffusersCartoonize(CartoonizeProvider):
             app = FaceAnalysis(name="buffalo_l", providers=providers)
             app.prepare(ctx_id=0 if hw.cuda else -1, det_size=(640, 640))
             ctx["face_app"] = app
-        self._build(ctx, ctx["ladder"][0])
-        return ctx
+        # Loading can run out of memory too (e.g. full_gpu on a card that is
+        # busy): walk the ladder here as well, not only during generation.
+        last_exc: Exception | None = None
+        for strategy in ctx["ladder"]:
+            try:
+                self._build(ctx, strategy)
+                return ctx
+            except Exception as exc:
+                if not _is_oom(exc):
+                    raise
+                last_exc = exc
+                warnings.append(f"OOM while loading with {strategy}")
+                self._free(ctx)
+        raise RuntimeError(
+            "Out of GPU memory while loading the models. Try --family sd15 or close other GPU applications."
+        ) from last_exc
 
     def _build(self, ctx: dict[str, Any], strategy: str) -> None:
         import torch

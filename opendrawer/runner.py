@@ -64,6 +64,7 @@ class RunSettings:
     identity: str = "auto"
     candidates: int = 3
     seed: Optional[int] = None
+    steps: Optional[int] = None  # override the style's diffusion steps
     color_source: str = "photo"
     commercial_safe: bool = False
     paper: str = "A4"
@@ -237,6 +238,7 @@ class PageRun:
                 "style": s.style,
                 "candidates": s.candidates,
                 "seed": s.seed,
+                "steps": s.steps,
                 "family": s.family,
                 "identity": s.identity,
                 "commercial_safe": s.commercial_safe,

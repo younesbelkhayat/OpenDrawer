@@ -95,3 +95,13 @@ def test_style_prompt():
     assert "livre-jeunesse" in list_styles()
     pos, neg = build_prompt(load_style("livre-jeunesse"), "dog", None)
     assert "a happy dog" in pos and "photo" in neg
+
+
+def test_selftest_reports_without_raising(tmp_path, monkeypatch):
+    import opendrawer.selftest as st
+
+    monkeypatch.setattr(st, "PROJECTS_DIR", tmp_path)
+    report = st.run_selftest(family="sd15", generate=False)
+    names = [c["check"] for c in report["checks"]]
+    assert names[:3] == ["versions", "hardware", "models:sd15"]
+    assert (tmp_path / "_selftest_report.json").is_file()

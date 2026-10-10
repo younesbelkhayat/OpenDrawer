@@ -22,6 +22,9 @@ make models         # SDXL + ControlNet + IP-Adapter, ~12 Go, une seule fois, sa
 python -m opendrawer doctor
 ```
 
+Premier essai pas à pas : [`docs/PREMIER_ESSAI.md`](docs/PREMIER_ESSAI.md)
+(`python -m opendrawer selftest` vérifie GPU, modèles et une vraie génération).
+
 Pas de GPU ? `python -m opendrawer demo` produit une page de démonstration
 en quelques secondes avec le backend OpenCV (aucun modèle).
 
